@@ -298,7 +298,7 @@ bool bar_manager_set_topmost(struct bar_manager *bar_manager, char level, bool t
       bar_manager->window_level = kCGStatusWindowLevel;
     }
   } else {
-    bar_manager->window_level = kCGBackstopMenuLevel;
+    bar_manager->window_level = kCGDesktopWindowLevel;
   }
 
   bar_manager_reset(bar_manager);
