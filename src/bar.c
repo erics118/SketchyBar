@@ -5,6 +5,16 @@
 #include "misc/helpers.h"
 #include "window.h"
 
+#define MAX_RENDER_THREADS 10
+static pthread_t g_render_threads[MAX_RENDER_THREADS];
+static uint32_t g_used_threads = 0;
+
+void join_render_threads() {
+  for (int i = 0; i < g_used_threads; i++)
+    pthread_join(g_render_threads[i], NULL);
+  g_used_threads = 0;
+}
+
 bool bar_draws_item(struct bar* bar, struct bar_item* bar_item) {
     if (!bar_item->drawing || !bar->shown || bar->hidden) return false;
 
@@ -137,7 +147,7 @@ static void bar_check_for_clip_updates(struct bar* bar) {
   }
 }
 
-void bar_draw(struct bar* bar, bool forced) {
+void bar_draw(struct bar* bar, bool forced, bool threaded) {
   if (bar->sid < 1 || bar->adid < 1) return;
 
   if (g_bar_manager.might_need_clipping)
@@ -149,6 +159,7 @@ void bar_draw(struct bar* bar, bool forced) {
     background.bounds.origin.y -= background.y_offset;
     background.shadow.enabled = false;
     background.enabled = true;
+    windows_freeze();
     CGContextClearRect(bar->window.context, bar->window.frame);
     background_draw(&background, bar->window.context);
   }
@@ -185,14 +196,29 @@ void bar_draw(struct bar* bar, bool forced) {
       window_assign_mouse_tracking_area(window, window->frame);
     }
 
-    CGContextClearRect(window->context, window->frame);
-
-    bar_item_draw(bar_item, window->context);
-    CGContextFlush(window->context);
+    windows_freeze();
+    if (threaded && g_used_threads < MAX_RENDER_THREADS) {
+      uint32_t thread_id = g_used_threads++;
+      struct draw_item_payload {
+        struct window* window;
+        struct bar_item bar_item;
+      }* context = malloc(sizeof(struct draw_item_payload));
+      // We need to perform a shallow copy of the item here because
+      // the cached bounds will be invalidated when drawing the next bar.
+      context->bar_item = *bar_item;
+      context->window = window;
+      pthread_create(&g_render_threads[thread_id],
+                     NULL,
+                     draw_item_proc,
+                     context        );
+    } else {
+      CGContextClearRect(window->context, window->frame);
+      bar_item_draw(bar_item, window->context);
+      CGContextFlush(window->context);
+    }
   }
 
-  if (g_bar_manager.bar_needs_update)
-    CGContextFlush(bar->window.context);
+  if (g_bar_manager.bar_needs_update) CGContextFlush(bar->window.context);
 }
 
 static void bar_calculate_bounds_top_bottom(struct bar* bar) {
@@ -309,6 +335,9 @@ static void bar_calculate_bounds_top_bottom(struct bar* bar) {
     window_set_frame(bar_item_get_window(bar_item->group->members[0],
                                          bar->adid                   ),
                      bar_item->group->bounds                           );
+
+    if (bar_item->popup.drawing)
+      bar_calculate_popup_anchor_for_bar_item(bar, bar_item);
   }
 }
 

@@ -174,10 +174,6 @@ bool bar_item_update(struct bar_item* bar_item, char* sender, bool forced, struc
 }
 
 void bar_item_needs_update(struct bar_item* bar_item) {
-  if (bar_item->group && bar_item != bar_item->group->members[0]) {
-      bar_item_needs_update(bar_item->group->members[0]);
-  }
-    
   bar_item->needs_update = true;
 }
 
@@ -701,6 +697,15 @@ void bar_item_clip_bar(struct bar_item* bar_item, int offset, struct bar* bar) {
   background_clip_bar(&bar_item->label.background, offset, bar);
 }
 
+void* draw_item_proc(void* context) {
+  struct { struct window* window; struct bar_item bar_item; }* info = context;
+  CGContextClearRect(info->window->context, info->window->frame);
+  bar_item_draw(&info->bar_item, info->window->context);
+  CGContextFlush(info->window->context);
+  free(context);
+  return NULL;
+}
+
 void bar_item_draw(struct bar_item* bar_item, CGContextRef context) {
   background_draw(&bar_item->background, context);
   if (bar_item->type == BAR_COMPONENT_GROUP) return;
@@ -708,12 +713,9 @@ void bar_item_draw(struct bar_item* bar_item, CGContextRef context) {
   text_draw(&bar_item->icon, context);
   text_draw(&bar_item->label, context);
 
-  if (bar_item->has_alias)
-    alias_draw(&bar_item->alias, context);
-  if (bar_item->has_graph)
-    graph_draw(&bar_item->graph, context);
-  if (bar_item->has_slider)
-    slider_draw(&bar_item->slider, context);
+  if (bar_item->has_alias) alias_draw(&bar_item->alias, context);
+  if (bar_item->has_graph) graph_draw(&bar_item->graph, context);
+  if (bar_item->has_slider) slider_draw(&bar_item->slider, context);
 }
 
 void bar_item_change_space(struct bar_item* bar_item, uint64_t dsid, uint32_t adid) {
@@ -880,9 +882,10 @@ void bar_item_serialize(struct bar_item* bar_item, FILE* rsp) {
                "\t\t\"associated_display_mask\": %u,\n"
                "\t\t\"ignore_association\": \"%s\",\n"
                "\t\t\"y_offset\": %d,\n"
-               "\t\t\"width\": %d,\n"
                "\t\t\"padding_left\": %d,\n"
                "\t\t\"padding_right\": %d,\n"
+               "\t\t\"scroll_texts\": \"%s\",\n"
+               "\t\t\"width\": %d,\n"
                "\t\t\"background\": {\n",
                bar_item->name,
                type,
@@ -894,6 +897,7 @@ void bar_item_serialize(struct bar_item* bar_item, FILE* rsp) {
                bar_item->y_offset,
                bar_item->background.padding_left,
                bar_item->background.padding_right,
+               format_bool(bar_item->scroll_texts),
                bar_item->has_const_width ? bar_item->custom_width : -1);
 
   background_serialize(&bar_item->background, "\t\t\t", rsp, true);
@@ -1079,7 +1083,7 @@ void bar_item_parse_set_message(struct bar_item* bar_item, char* message, FILE* 
                       (bool (*)(void*, int))&bar_item_set_width,
                       bar_item->custom_width,
                       -1,
-                      1,
+                      0,
                       INTERP_FUNCTION_LINEAR               );
       animator_add(&g_bar_manager.animator, animation);
     }

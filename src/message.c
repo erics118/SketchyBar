@@ -575,7 +575,7 @@ static void handle_domain_order(FILE* rsp, struct token domain, char* message) {
   }
 
   bar_manager_sort(&g_bar_manager, ordering, count);
-  bar_manager_refresh(&g_bar_manager, false);
+  bar_manager_refresh(&g_bar_manager, false, false);
 }
 
 void handle_message_mach(struct mach_buffer* buffer) {
@@ -713,6 +713,9 @@ void handle_message_mach(struct mach_buffer* buffer) {
     } else if (token_equals(command, DOMAIN_HOTLOAD)) {
       struct token token = get_token(&message);
       hotload_set_state(evaluate_boolean_state(token, hotload_get_state()));
+    } else if (token_equals(command, DOMAIN_ADD_FONT)) {
+      struct token token = get_token(&message);
+      font_register(token_to_string(token));
     } else if (token_equals(command, DOMAIN_RELOAD)) {
       char* rbr_msg = get_batch_line(&message);
       char* cur = rbr_msg;
@@ -746,7 +749,7 @@ void handle_message_mach(struct mach_buffer* buffer) {
 
   animator_lock(&g_bar_manager.animator);
   bar_manager_unfreeze(&g_bar_manager);
-  bar_manager_refresh(&g_bar_manager, false);
+  bar_manager_refresh(&g_bar_manager, false, false);
 
   if (rsp) fclose(rsp);
 

@@ -258,20 +258,21 @@ static void popup_close_window(struct popup* popup) {
   window_close(&popup->window);
 }
 
+static bool popup_contains_item(struct popup* popup, struct bar_item* bar_item) {
+  for (int i = 0; i < popup->num_items; i++) {
+    if (popup->items[i] == bar_item) return true;
+  }
+  return false;
+}
+
 void popup_add_item(struct popup* popup, struct bar_item* bar_item) {
+  if (popup_contains_item(popup, bar_item)) return;
   popup->num_items++;
   popup->items = realloc(popup->items,
                          sizeof(struct bar_item*)*popup->num_items);
   popup->items[popup->num_items - 1] = bar_item;
   bar_item->parent = popup->host;
   popup->needs_ordering = true;
-}
-
-static bool popup_contains_item(struct popup* popup, struct bar_item* bar_item) {
-  for (int i = 0; i < popup->num_items; i++) {
-    if (popup->items[i] == bar_item) return true;
-  }
-  return false;
 }
 
 void popup_remove_item(struct popup* popup, struct bar_item* bar_item) {
@@ -328,9 +329,12 @@ bool popup_set_drawing(struct popup* popup, bool drawing) {
 void popup_draw(struct popup* popup) {
   if (!popup->drawing || popup->adid < 1 || popup->num_items == 0) return;
 
+  windows_freeze();
   if (!popup->window.id) popup_create_window(popup);
 
-  window_apply_frame(&popup->window, false);
+  if (!window_apply_frame(&popup->window, false) && !popup->host->needs_update)
+    return;
+
   CGContextClearRect(popup->window.context, popup->background.bounds);
 
   window_assign_mouse_tracking_area(&popup->window, popup->window.frame);
