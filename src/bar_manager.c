@@ -803,7 +803,7 @@ void bar_manager_handle_mouse_exited_global(struct bar_manager* bar_manager) {
   bar_manager_handle_mouse_exited(bar_manager, NULL);
 }
 
-void bar_manager_handle_mouse_scrolled_global(struct bar_manager* bar_manager, int scroll_delta, uint32_t adid, uint32_t modifier) {
+void bar_manager_handle_mouse_scrolled_global(struct bar_manager* bar_manager, int scroll_delta, uint32_t adid, uint32_t modifier, bool is_trackpad) {
   struct env_vars env_vars;
   env_vars_init(&env_vars);
   char delta_ver_str[32];
@@ -813,14 +813,15 @@ void bar_manager_handle_mouse_scrolled_global(struct bar_manager* bar_manager, i
                string_copy(delta_ver_str));
 
   char info_str[256];
-  snprintf(info_str, 256, "{\n"
-                          "\t\"delta\": %d,\n"
-                          "\t\"modifier\": \"%s\",\n"
-                          "\t\"modfier_code\": %u\n"
-                          "}\n",
-                          scroll_delta,
-                          get_modifier_description(modifier),
-                          modifier                           );
+  snprintf(info_str, 256,
+           "{\n"
+           "\t\"delta\": %d,\n"
+           "\t\"modifier\": \"%s\",\n"
+           "\t\"modifier_code\": %u,\n"
+           "\t\"device_type\": \"%s\"\n"
+           "}\n",
+           scroll_delta, get_modifier_description(modifier), modifier,
+           is_trackpad ? "trackpad": "mouse");
 
   env_vars_set(&env_vars, string_copy("INFO"), string_copy(info_str));
 

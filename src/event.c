@@ -244,6 +244,8 @@ static void event_mouse_scrolled(void* context) {
         kCGScrollWheelEventDeltaAxis1);
   uint32_t modifier_keys = CGEventGetFlags(context);
 
+  bool is_trackpad = CGEventGetIntegerValueField(context, kCGScrollWheelEventIsContinuous) != 0;
+  
   uint64_t event_time = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW_APPROX);
   if (g_scroll_info.timestamp + SCROLL_TIMEOUT > event_time) {
     g_scroll_info.delta_y += scroll_delta;
@@ -269,11 +271,10 @@ static void event_mouse_scrolled(void* context) {
       // Handle global mouse scrolled event
       if (bar->mouse_over
           && !bar_manager_mouse_over_any_popup(&g_bar_manager)) {
-        bar_manager_handle_mouse_scrolled_global(&g_bar_manager,
-                                                 scroll_delta
-                                                 + g_scroll_info.delta_y,
-                                                 bar->adid,
-                                                 modifier_keys           );
+        bar_manager_handle_mouse_scrolled_global(
+            &g_bar_manager, scroll_delta + g_scroll_info.delta_y, bar->adid,
+            modifier_keys,
+            is_trackpad);
       }
 
       g_scroll_info.delta_y = 0;
@@ -285,11 +286,10 @@ static void event_mouse_scrolled(void* context) {
       // Handle global mouse scrolled event
       if (popup->mouse_over
           && !bar_manager_mouse_over_any_bar(&g_bar_manager)) {
-        bar_manager_handle_mouse_scrolled_global(&g_bar_manager,
-                                                 scroll_delta
-                                                 + g_scroll_info.delta_y,
-                                                 popup->adid,
-                                                 modifier_keys           );
+        bar_manager_handle_mouse_scrolled_global(
+            &g_bar_manager, scroll_delta + g_scroll_info.delta_y, popup->adid,
+            modifier_keys,
+            is_trackpad);
       }
 
       g_scroll_info.delta_y = 0;
@@ -299,7 +299,7 @@ static void event_mouse_scrolled(void* context) {
 
   bar_item_on_scroll(bar_item,
                      scroll_delta + g_scroll_info.delta_y,
-                     modifier_keys                        );
+                     modifier_keys, is_trackpad                        );
 
   if (bar_item && bar_item->needs_update)
     bar_manager_refresh(&g_bar_manager, false, false);
@@ -393,7 +393,7 @@ void event_post(struct event *event) {
 
   if (event->type == ANIMATOR_REFRESH) {
     // We try to lock the mutex up to 1ms and then concede (skip the frame) to
-    // avoid deadlocking occuring due to the CVDisplayLink.
+    // avoid deadlocking occurring due to the CVDisplayLink.
     int locked;
     for (int i = 0; i < 10; i++) {
       if ((locked = pthread_mutex_trylock(&event_mutex)) == 0) break;

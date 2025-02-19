@@ -207,7 +207,7 @@ void bar_item_on_click(struct bar_item* bar_item, uint32_t type, uint32_t mouse_
                          "\t\"button\": \"%s\",\n"
                          "\t\"button_code\": %u,\n"
                          "\t\"modifier\": \"%s\",\n"
-                         "\t\"modfier_code\": %u\n"
+                         "\t\"modifier_code\": %u\n"
                          "}\n",
                          get_type_description(type),
                          mouse_button_code,
@@ -256,20 +256,23 @@ void bar_item_on_click(struct bar_item* bar_item, uint32_t type, uint32_t mouse_
   env_vars_destroy(&env_vars);
 }
 
-void bar_item_on_scroll(struct bar_item* bar_item, int scroll_delta, uint32_t modifier) {
+void bar_item_on_scroll(struct bar_item* bar_item, int scroll_delta, uint32_t modifier, bool is_trackpad) {
   if (!bar_item) return;
 
   struct env_vars env_vars;
   env_vars_init(&env_vars);
   char info_str[256];
-  snprintf(info_str, 256, "{\n"
-                          "\t\"delta\": %d,\n"
-                          "\t\"modifier\": \"%s\",\n"
-                          "\t\"modfier_code\": %u\n"
-                          "}\n",
-                          scroll_delta,
-                          get_modifier_description(modifier),
-                          modifier                           );
+  snprintf(info_str, 256,
+           "{\n"
+           "\t\"delta\": %d,\n"
+           "\t\"modifier\": \"%s\",\n"
+           "\t\"modifier_code\": %u,\n"
+           "\t\"device_type\": \"%s\"\n"
+           "}\n",
+           scroll_delta, get_modifier_description(modifier),
+           modifier,
+           is_trackpad ? "trackpad": "mouse"
+ );
 
   env_vars_set(&env_vars, string_copy("INFO"), string_copy(info_str));
 

@@ -1,0 +1,44 @@
+Style:
+  FullyQualifiedNamespaces: Yes
+
+Diagnostics:
+  ClangTidy:
+    Add: 
+      - performance-*
+      - portability-*
+      - readability-*
+      - misc-*
+      - modernize-*
+      - google-*
+      - cppcoreguidelines-*
+      - clang-analyzer-*
+      - clang-analyzer-*
+      - bugprone-*
+    Remove:
+      - readability-identifier-length
+      - modernize-use-trailing-return-type
+      - modernize-avoid-bind
+      - cppcoreguidelines-avoid-non-const-global-variables
+      - readability-implicit-bool-conversion
+      - cppcoreguidelines-avoid-magic-numbers
+      - readability-magic-numbers
+      - misc-non-private-member-variables-in-classes
+      - google-readability-todo
+      - readability-braces-around-statements
+      - cppcoreguidelines-macro-usage
+      - google-readability-braces-around-statements
+  UnusedIncludes: Strict
+
+Completion:
+  AllScopes: Yes
+
+InlayHints:
+  Enabled: Yes
+  ParameterNames: Yes
+  DeducedTypes: Yes
+
+Hover:
+  ShowAKA: Yes
+
+CompileFlags:
+  Add: [-include stdint.h -include stdbool.h -std=c11 -Wall -DNDEBUG -O2 -fvisibility=hidden -mmacosx-version-min=11.0 -fno-objc-arc -arch x86_64 -arch arm64]
