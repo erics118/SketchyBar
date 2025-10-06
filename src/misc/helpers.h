@@ -172,6 +172,10 @@ static inline char* get_type_description(uint32_t type) {
       return "left";
     case kCGEventRightMouseUp:
       return "right";
+    case kCGEventOtherMouseUp:
+      return "middle";
+    case kCGEventOtherMouseDown:
+      return "middle";
     default:
       return "other";
   }
@@ -189,6 +193,8 @@ static inline char* get_modifier_description(uint32_t modifier) {
         strcat(description, "alt,");
     if (modifier & kCGEventFlagMaskCommand)
         strcat(description, "cmd,");
+    if (modifier & kCGEventFlagMaskSecondaryFn)
+        strcat(description, "fn,");
 
     int len = strlen(description);
     if (len > 0 && description[len - 1] == ',') {
