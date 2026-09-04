@@ -583,6 +583,7 @@ static void handle_domain_order(FILE* rsp, struct token domain, char* message) {
       name = get_token(&message);
       continue;
     }
+    if (count >= g_bar_manager.bar_item_count) break;
     ordering[count] = g_bar_manager.bar_items[index];
     count++;
 

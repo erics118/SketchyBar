@@ -32,8 +32,11 @@ void begin_receiving_network_events() {
                                                                      store,
                                                                      0     );
 
-  CFRunLoopAddSource(CFRunLoopGetCurrent(),
-                     loop_source,
-                     kCFRunLoopDefaultMode );
+  if (loop_source) {
+    CFRunLoopAddSource(CFRunLoopGetCurrent(),
+                       loop_source,
+                       kCFRunLoopDefaultMode );
+    CFRelease(loop_source);
+  }
   CFRelease(keys);
 }

@@ -105,10 +105,13 @@ static void text_destroy_line(struct text* text) {
 bool text_set_max_chars(struct text* text, uint32_t max_chars) {
   if (text->max_chars == max_chars) return false;
   text->max_chars = max_chars;
-  if (strlen(text->string) > text->max_chars) {
+  uint32_t char_count = 0;
+  for (char* p = text->string; *p; p++)
+    if ((*p & 0xC0) != 0x80) char_count++;
+  if (char_count > text->max_chars) {
     text_set_string(text, text->string, true);
   }
-  return strlen(text->string) > text->max_chars;
+  return char_count > text->max_chars;
 }
 
 bool text_set_string(struct text* text, char* string, bool forced) {
@@ -129,6 +132,8 @@ void text_copy(struct text* text, struct text* source) {
   font_set_style(&text->font, string_copy(source->font.style), true);
   font_set_size(&text->font, source->font.size);
   font_set_typographical_width(&text->font, source->font.typographical_width);
+  if (source->font.features)
+    font_set_features(&text->font, string_copy(source->font.features));
   text_set_string(text, string_copy(source->string), true);
 }
 

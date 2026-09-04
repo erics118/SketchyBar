@@ -22,6 +22,7 @@ bool font_set_size(struct font* font, float size);
 bool font_set_family(struct font* font, char* family, bool forced);
 bool font_set_style(struct font* font, char* style, bool forced);
 bool font_set_typographical_width(struct font* font, bool typographical_width);
+bool font_set_features(struct font* font, char* features);
 void font_create_ctfont(struct font* font);
 void font_clear_pointers(struct font* font);
 

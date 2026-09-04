@@ -20,6 +20,10 @@ struct surface* surface_create(struct window* window) {
 
   surface->wid = window->id;
   surface->layer = layer_create(g_connection, window->frame);
+  if (!surface->layer) {
+    surface_destroy(surface);
+    return NULL;
+  }
 
   if (SLSAddSurface(g_connection, window->id, &surface->id) != kCGErrorSuccess
       || surface->id == 0) {
