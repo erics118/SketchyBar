@@ -119,6 +119,7 @@ int bar_manager_get_item_index_by_address(struct bar_manager* bar_manager, struc
 
 void bar_manager_move_item(struct bar_manager* bar_manager, struct bar_item* item, struct bar_item* reference, bool before) {
   if (bar_manager->bar_item_count <= 0) return;
+  if (item == reference) return;
   struct bar_item* tmp[bar_manager->bar_item_count];
   int count = 0;
   for (int i = 0; i < bar_manager->bar_item_count; i++) {
@@ -635,7 +636,7 @@ struct bar_item* bar_manager_get_item_by_point(struct bar_manager* bar_manager, 
     if (!bar_item->drawing) continue;
 
     for (int adid = 1; adid <= bar_item->num_windows; adid++) {
-      struct window* window = bar_item_get_window(bar_item, adid);
+      struct window* window = bar_item->windows[adid - 1];
       if (!window) continue;
 
       CGRect frame = window->frame;
@@ -655,7 +656,7 @@ struct bar_item* bar_manager_get_item_by_wid(struct bar_manager* bar_manager, ui
     if (!bar_item->drawing) continue;
 
     for (int adid = 1; adid <= bar_item->num_windows; adid++) {
-      struct window* window = bar_item_get_window(bar_item, adid);
+      struct window* window = bar_item->windows[adid - 1];
       if (!window) continue;
 
       if (window->id == wid) {

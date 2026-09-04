@@ -126,8 +126,18 @@ char* mach_send_message(mach_port_t port, char* message, uint32_t len, bool awai
 
 void mach_message_callback(CFMachPortRef port, void* message, CFIndex size, void* context) {
   struct mach_server* mach_server = context;
+  struct mach_message* msg = message;
+
+  if (size < sizeof(struct mach_message)
+      || !(msg->header.msgh_bits & MACH_MSGH_BITS_COMPLEX)
+      || msg->msgh_descriptor_count != 1
+      || msg->descriptor.type != MACH_MSG_OOL_DESCRIPTOR) {
+    mach_msg_destroy(&msg->header);
+    return;
+  }
+
   struct mach_buffer buffer;
-  buffer.message = *(struct mach_message*)message;
+  buffer.message = *msg;
   mach_server->handler(&buffer);
   mach_msg_destroy(&buffer.message.header);
 }

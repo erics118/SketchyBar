@@ -58,14 +58,16 @@ asan: clean arm64
 $(ODIR)/sketchybar: $(SRC)/sketchybar.c $(OBJ) | $(ODIR)
 	$(CC) $(CFLAGS) $^ -o $@ $(LIBS)
 
-$(ODIR)/%.o: $(SRC)/%.c $(SRC)/%.h | $(ODIR)
-	$(CC) -c -o $@ $< $(CFLAGS)
+$(ODIR)/%.o: $(SRC)/%.c | $(ODIR)
+	$(CC) -c -o $@ $< $(CFLAGS) -MMD -MP
 
-$(ODIR)/%.om: $(SRC)/%.m $(SRC)/%.h | $(ODIR)
-	$(CC) -c -o $@ $< $(CFLAGS)
+$(ODIR)/%.om: $(SRC)/%.m | $(ODIR)
+	$(CC) -c -o $@ $< $(CFLAGS) -MMD -MP
 
 $(ODIR):
 	mkdir $(ODIR)
+
+-include $(wildcard $(ODIR)/*.d)
 
 clean:
 	rm -rf $(ODIR)

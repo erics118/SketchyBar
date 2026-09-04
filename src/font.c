@@ -153,7 +153,10 @@ void font_init(struct font* font) {
   font->size = 14.f;
   font->style = string_copy("Bold");
   font->family = string_copy("Hack Nerd Font");
+  font->features = NULL;
+  font->ct_font = NULL;
   font->typographical_width = false;
+  font->font_changed = false;
   font_create_ctfont(font);
 }
 

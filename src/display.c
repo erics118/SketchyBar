@@ -306,6 +306,7 @@ void begin_receiving_brightness_events() {
       DisplayServicesRegisterForBrightnessChangeNotifications(did, did, (void*)brightness_handler);
     }
   }
+  free(result);
 }
 
 void display_serialize(FILE* rsp) {

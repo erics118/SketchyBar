@@ -71,9 +71,13 @@ void menu_item_list_clear(struct menu_item_list* menu_item_list) {
 struct menu_item_list get_menu_item_list() {
   CFArrayRef window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionAll,
                                                       kCGNullWindowID        );
+  struct menu_item_list menu_item_list;
+  if (!window_list) {
+    menu_item_list_init(&menu_item_list, 0);
+    return menu_item_list;
+  }
   int window_count = CFArrayGetCount(window_list);
 
-  struct menu_item_list menu_item_list;
   menu_item_list_init(&menu_item_list, window_count);
 
   int item_count = 0;
@@ -131,6 +135,7 @@ struct menu_item_list get_menu_item_list() {
 
   menu_item_list.menu_item_count = item_count;
   menu_item_list_sort(&menu_item_list);
+  CFRelease(window_list);
   return menu_item_list;
 }
 

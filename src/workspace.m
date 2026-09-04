@@ -109,9 +109,11 @@ CGImageRef workspace_icon_for_app(char* app) {
 
     float scale = workspace_get_scale();
     NSRect rect = NSMakeRect( 0, 0, 32 * scale, 32 * scale);
-    return (CGImageRef)CFRetain([image CGImageForProposedRect: &rect
-                                                      context: NULL
-                                                        hints: NULL]);
+    CGImageRef cg_image = [image CGImageForProposedRect: &rect
+                                               context: NULL
+                                                 hints: NULL];
+    if (!cg_image) return NULL;
+    return (CGImageRef)CFRetain(cg_image);
   }
 }
 

@@ -14,6 +14,7 @@ void graph_init(struct graph* graph) {
 }
 
 void graph_setup(struct graph* graph, uint32_t width) {
+  if (width == 0) return;
   graph->width = width;
   graph->y = malloc(sizeof(float) * width);
   memset(graph->y, 0, sizeof(float) * width);

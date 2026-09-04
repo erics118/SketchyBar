@@ -219,7 +219,6 @@ static void animator_remove(struct animator* animator, struct animation* animati
 
 void animator_cancel_locked(struct animator* animator, void* target, animator_function* function) {
   struct animation* remove[animator->animation_count];
-  memset(remove, 0, animator->animation_count);
   uint32_t remove_count = 0;
 
   for (int i = 0; i < animator->animation_count; i++) {
@@ -240,7 +239,6 @@ bool animator_cancel(struct animator* animator, void* target, animator_function*
   bool needs_update = false;
 
   struct animation* remove[animator->animation_count];
-  memset(remove, 0, animator->animation_count);
   uint32_t remove_count = 0;
 
   for (int i = 0; i < animator->animation_count; i++) {
@@ -262,7 +260,6 @@ bool animator_cancel(struct animator* animator, void* target, animator_function*
 bool animator_update(struct animator* animator, uint64_t time) {
   bool needs_refresh = false;
   struct animation* remove[animator->animation_count];
-  memset(remove, 0, animator->animation_count);
   uint32_t remove_count = 0;
 
   for (uint32_t i = 0; i < animator->animation_count; i++) {
