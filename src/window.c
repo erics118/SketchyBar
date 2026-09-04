@@ -25,6 +25,10 @@ void window_init(struct window* window) {
 }
 
 static CFTypeRef window_create_region(struct window* window, CGRect frame) {
+  // window server excludes the top boundary row from the input shape
+  // extend the shape 1px above the frame so the top drawn row stays clickable
+  frame.origin.y -= 1;
+  frame.size.height += 1;
   CFTypeRef frame_region;
   CGSNewRegionWithRect(&frame, &frame_region);
   return frame_region;
