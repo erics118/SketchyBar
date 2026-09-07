@@ -66,6 +66,8 @@ void window_open(struct window* window, CGRect frame) {
   uint32_t id;
   CFTypeRef frame_region = window_create_region(window, frame);
   CFTypeRef empty_region = CGRegionCreateEmptyRegion();
+  // creation anchors the window by the shape bbox, which the region extends
+  // 1px above the frame; offset the origin so the frame top lands on target
   SLSNewWindowWithOpaqueShapeAndContext(g_connection,
                                         kCGBackingStoreBuffered,
                                         frame_region,
@@ -73,7 +75,7 @@ void window_open(struct window* window, CGRect frame) {
                                         13 | (1 << 18),
                                         &set_tags,
                                         window->origin.x,
-                                        window->origin.y,
+                                        window->origin.y + 1,
                                         64,
                                         &id,
                                         NULL                    );
