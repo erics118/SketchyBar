@@ -5,6 +5,13 @@
 #include "misc/helpers.h"
 #include "window.h"
 
+// extra pixel added at the top edge of a top bar
+// the topmost screen row is otherwise stolen by the menu bar and clicks there
+// pass through, so the bar window is grown 1px above the screen to own it
+static inline int bar_top_click_pad(void) {
+  return g_bar_manager.position == POSITION_TOP ? 1 : 0;
+}
+
 bool bar_draws_item(struct bar* bar, struct bar_item* bar_item) {
     if (!bar_item->drawing || !bar->shown || bar->hidden) return false;
 
@@ -222,7 +229,8 @@ static void bar_calculate_bounds_top_bottom(struct bar* bar) {
                                            - notch_width) / 2;
 
   uint32_t* next_position = NULL;
-  uint32_t y = bar->window.frame.size.height / 2;
+  // center content in the real bar, ignoring the top click pad
+  uint32_t y = (bar->window.frame.size.height - bar_top_click_pad()) / 2;
 
   for (int i = 0; i < g_bar_manager.bar_item_count; i++) {
     struct bar_item* bar_item = g_bar_manager.bar_items[i];
@@ -265,6 +273,7 @@ static void bar_calculate_bounds_top_bottom(struct bar* bar) {
     CGPoint shadow_offsets = bar_item_calculate_shadow_offsets(bar_item);
     uint32_t bar_item_length = bar_item_calculate_bounds(bar_item,
                                  bar->window.frame.size.height
+                                 - bar_top_click_pad()
                                  - (g_bar_manager.background.border_width + 1),
                                  max(shadow_offsets.x, 0),
                                  y                                           );
@@ -480,16 +489,18 @@ static CGRect bar_get_frame(struct bar *bar) {
       origin.y += menu.size.height;
     }
 
+    int pad = bar_top_click_pad();
+    origin.y -= pad;
 
     if (notch_display_height > 0) {
       return (CGRect) {{origin.x, origin.y},
                         {bounds.size.width,
-                        g_bar_manager.notch_display_height}};
+                        g_bar_manager.notch_display_height + pad}};
     }
-    
+
     return (CGRect) {{origin.x, origin.y},
                       {bounds.size.width,
-                      g_bar_manager.background.bounds.size.height}};
+                      g_bar_manager.background.bounds.size.height + pad}};
   }
 }
 

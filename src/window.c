@@ -25,10 +25,6 @@ void window_init(struct window* window) {
 }
 
 static CFTypeRef window_create_region(struct window* window, CGRect frame) {
-  // window server excludes the top boundary row from the input shape
-  // extend the shape 1px above the frame so the top drawn row stays clickable
-  frame.origin.y -= 1;
-  frame.size.height += 1;
   CFTypeRef frame_region;
   CGSNewRegionWithRect(&frame, &frame_region);
   return frame_region;
@@ -66,8 +62,6 @@ void window_open(struct window* window, CGRect frame) {
   uint32_t id;
   CFTypeRef frame_region = window_create_region(window, frame);
   CFTypeRef empty_region = CGRegionCreateEmptyRegion();
-  // creation anchors the window by the shape bbox, which the region extends
-  // 1px above the frame; offset the origin so the frame top lands on target
   SLSNewWindowWithOpaqueShapeAndContext(g_connection,
                                         kCGBackingStoreBuffered,
                                         frame_region,
@@ -75,7 +69,7 @@ void window_open(struct window* window, CGRect frame) {
                                         13 | (1 << 18),
                                         &set_tags,
                                         window->origin.x,
-                                        window->origin.y + 1,
+                                        window->origin.y,
                                         64,
                                         &id,
                                         NULL                    );
