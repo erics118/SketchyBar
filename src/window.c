@@ -51,7 +51,9 @@ static void window_clear_background(struct window* window) {
 }
 
 void window_open(struct window* window, CGRect frame) {
-  uint64_t set_tags = kCGSExposeFadeTagBit | kCGSPreventsActivationTagBit;
+  uint64_t set_tags = kCGSExposeFadeTagBit
+                      | kCGSPreventsActivationTagBit
+                      | kCGSNoClickRaiseTagBit;
   uint64_t clear_tags = 0;
 
   window->origin = frame.origin;

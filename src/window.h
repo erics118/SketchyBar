@@ -3,6 +3,8 @@
 
 #define kCGSExposeFadeTagBit         (1ULL <<  1)
 #define kCGSPreventsActivationTagBit (1ULL <<  16)
+// unofficial name, stops the window server raising the window on click
+#define kCGSNoClickRaiseTagBit       (1ULL <<  12)
 
 #define W_ABOVE  1
 #define W_OUT    0
