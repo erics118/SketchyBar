@@ -257,6 +257,23 @@ bool animator_cancel(struct animator* animator, void* target, animator_function*
   return needs_update;
 }
 
+void animator_cancel_range(struct animator* animator, void* start, size_t size) {
+  if (animator->animation_count == 0) return;
+  struct animation* remove[animator->animation_count];
+  uint32_t remove_count = 0;
+
+  for (int i = 0; i < animator->animation_count; i++) {
+    struct animation* animation = animator->animations[i];
+    if (animation->target >= start && animation->target < start + size) {
+      remove[remove_count++] = animation;
+    }
+  }
+
+  for (uint32_t i = 0; i < remove_count; i++) {
+    animator_remove(animator, remove[i]);
+  }
+}
+
 bool animator_update(struct animator* animator, uint64_t time) {
   bool needs_refresh = false;
   struct animation* remove[animator->animation_count];
@@ -293,4 +310,6 @@ void animator_destroy(struct animator* animator) {
   }
 
   if (animator->animations) free(animator->animations);
+  animator->animations = NULL;
+  animator->animation_count = 0;
 }

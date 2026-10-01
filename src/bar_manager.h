@@ -92,6 +92,7 @@ struct bar_item* bar_manager_get_item_by_wid(struct bar_manager* bar_manager, ui
 struct popup* bar_manager_get_popup_by_wid(struct bar_manager* bar_manager, uint32_t wid);
 struct bar* bar_manager_get_bar_by_wid(struct bar_manager* bar_manager, uint32_t wid);
 int bar_manager_get_item_index_for_name(struct bar_manager* bar_manager, char* name);
+int bar_manager_get_item_index_by_address(struct bar_manager* bar_manager, struct bar_item* bar_item);
 uint32_t bar_manager_length_for_bar_side(struct bar_manager* bar_manager, struct bar* bar, char side);
 bool bar_manager_mouse_over_any_popup(struct bar_manager* bar_manager);
 bool bar_manager_mouse_over_any_bar(struct bar_manager* bar_manager);
@@ -122,6 +123,7 @@ void bar_manager_handle_volume_change(struct bar_manager* bar_manager, float vol
 void bar_manager_handle_wifi_change(struct bar_manager* bar_manager, char* ssid);
 void bar_manager_handle_brightness_change(struct bar_manager* bar_manager, float brightness);
 void bar_manager_handle_power_source_change(struct bar_manager* bar_manager, char* state);
+void bar_manager_handle_battery_change(struct bar_manager* bar_manager, char* state);
 void bar_manager_handle_media_change(struct bar_manager* bar_manager, char* info);
 void bar_manager_handle_media_cover_change(struct bar_manager* bar_manager, CGImageRef image);
 void bar_manager_handle_space_windows_change(struct bar_manager* bar_manager, char* info);

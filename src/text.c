@@ -1,8 +1,17 @@
 #include "text.h"
 #include "bar_manager.h"
 
+static bool text_is_truncated(struct text* text) {
+  if (text->max_chars == 0 || !text->string) return false;
+  uint32_t counter = 0;
+  for (char* p = text->string; *p; p++) {
+    if ((*p & 0xC0) != 0x80 && ++counter > text->max_chars) return true;
+  }
+  return false;
+}
+
 static void text_calculate_truncated_width(struct text* text, CFDictionaryRef attributes) {
-  if (text->max_chars > 0) {
+  if (text_is_truncated(text)) {
     uint32_t len = strlen(text->string) + 4;
     char buffer[len];
     memset(buffer, 0, len);
@@ -29,9 +38,16 @@ static void text_calculate_truncated_width(struct text* text, CFDictionaryRef at
 
       CTLineRef line = CTLineCreateWithAttributedString(attr_string);
 
-      CGRect bounds = CTLineGetBoundsWithOptions(line,
+      if (text->font.typographical_width) {
+        text->width = (uint32_t)(CTLineGetTypographicBounds(line,
+                                                            NULL,
+                                                            NULL,
+                                                            NULL) + 0.5);
+      } else {
+        CGRect bounds = CTLineGetBoundsWithOptions(line,
                                               kCTLineBoundsUseGlyphPathBounds);
-      text->width = (uint32_t)(bounds.size.width + 1.5);
+        text->width = (uint32_t)(bounds.size.width + 1.5);
+      }
       CFRelease(attr_string);
       CFRelease(line);
       CFRelease(string);
@@ -85,10 +101,14 @@ static void text_prepare_line(struct text* text) {
 
   // when typographical_width is enabled, we don't need the extra 1px padding
   // to prevent clipping, as it already accounts for the full advance width
-  if (text->font.typographical_width)
+  if (text->font.typographical_width) {
     text->width = (uint32_t) (typographic_width + 0.5);
-  else
+    text->line.ink_offset = 0;
+  } else {
     text->width = text->bounds.size.width;
+    // the width spans the ink, so draw the ink at the start of the slot
+    text->line.ink_offset = text->bounds.origin.x;
+  }
 
   CFRelease(string);
   CFRelease(attr_string);
@@ -105,13 +125,8 @@ static void text_destroy_line(struct text* text) {
 bool text_set_max_chars(struct text* text, uint32_t max_chars) {
   if (text->max_chars == max_chars) return false;
   text->max_chars = max_chars;
-  uint32_t char_count = 0;
-  for (char* p = text->string; *p; p++)
-    if ((*p & 0xC0) != 0x80) char_count++;
-  if (char_count > text->max_chars) {
-    text_set_string(text, text->string, true);
-  }
-  return char_count > text->max_chars;
+  text_set_string(text, text->string, true);
+  return true;
 }
 
 bool text_set_string(struct text* text, char* string, bool forced) {
@@ -239,7 +254,13 @@ uint32_t text_get_length(struct text* text, bool override) {
 }
 
 uint32_t text_get_height(struct text* text) {
-  return text->drawing ? text->bounds.size.height : 0;
+  if (!text->drawing) return 0;
+
+  if (text->font.font_changed) {
+    text_set_string(text, text->string, true);
+  }
+
+  return text->bounds.size.height;
 }
 
 void text_destroy(struct text* text) {
@@ -251,7 +272,7 @@ void text_destroy(struct text* text) {
   text_clear_pointers(text);
 }
 
-void text_calculate_bounds(struct text* text, uint32_t x, uint32_t y) {
+void text_calculate_bounds(struct text* text, uint32_t x, int y) {
   if (text->align == POSITION_CENTER && text->has_const_width)
     text->bounds.origin.x = (int)x + ((int)text->custom_width
                                  - (int)text_get_length(text, true)) / 2;
@@ -261,13 +282,15 @@ void text_calculate_bounds(struct text* text, uint32_t x, uint32_t y) {
   else
     text->bounds.origin.x = x;
 
-  text->bounds.origin.y =(uint32_t)(y - ((text->line.ascent
-                                          - text->line.descent) / 2));
+  text->bounds.origin.y =(int32_t)(y - ((text->line.ascent
+                                         - text->line.descent) / 2));
 
   if (text->background.enabled) {
+    // the line height does not change with the ink of the current string
     uint32_t height = text->background.overrides_height
                       ? text->background.bounds.size.height
-                      : text->bounds.size.height;
+                      : (uint32_t)(text->line.ascent
+                                   + text->line.descent + 0.5);
 
     background_calculate_bounds(&text->background,
                                 x,
@@ -287,7 +310,7 @@ bool text_animate_scroll(struct text* text) {
   if (text->max_chars == 0) return false;
   if (text->scroll != 0) return false;
   if (text->has_const_width && text->custom_width < text->width) return false;
-  if (text->width == 0 || text->width == text->bounds.size.width) return false;
+  if (text->width == 0 || !text_is_truncated(text)) return false;
 
   g_bar_manager.animator.duration = text->scroll_duration
                                     * (text->bounds.size.width / text->width);
@@ -352,8 +375,9 @@ void text_draw(struct text* text, CGContextRef context) {
 
     CGRect bounds = shadow_get_bounds(&text->shadow, text->bounds);
     CGContextSetTextPosition(context,
-                             bounds.origin.x + text->padding_left,
-                             bounds.origin.y + text->y_offset     );
+                             bounds.origin.x + text->padding_left
+                             - text->line.ink_offset - text->scroll,
+                             bounds.origin.y + text->y_offset       );
     CTLineDraw(text->line.line, context);
   }
 
@@ -362,7 +386,7 @@ void text_draw(struct text* text, CGContextRef context) {
 
   CGContextSetTextPosition(context,
                            text->bounds.origin.x + text->padding_left
-                           - text->scroll,
+                           - text->line.ink_offset - text->scroll,
                            text->bounds.origin.y + text->y_offset    );
   CTLineDraw(text->line.line, context);
   CGContextRestoreGState(context);

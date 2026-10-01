@@ -40,13 +40,15 @@ bool bar_draws_item(struct bar* bar, struct bar_item* bar_item) {
 static void bar_calculate_popup_anchor_for_bar_item(struct bar* bar, struct bar_item* bar_item) {
   if (bar->adid != g_bar_manager.active_adid) return;
   struct window* window = bar_item_get_window(bar_item, bar->adid);
+  if (!window) return;
 
   if (!bar_item->popup.overrides_cell_size) {
     if (g_bar_manager.position == POSITION_LEFT
         || g_bar_manager.position == POSITION_RIGHT) {
       bar_item->popup.cell_size = window->frame.size.width;
     } else {
-      bar_item->popup.cell_size = window->frame.size.height;
+      bar_item->popup.cell_size = window->frame.size.height
+                                  - bar_top_click_pad();
     }
   }
 
@@ -69,13 +71,18 @@ static void bar_calculate_popup_anchor_for_bar_item(struct bar* bar, struct bar_
                 ? (- bar_item->popup.background.bounds.size.width)
                 : window->frame.size.width);
   } else {
+    CGPoint shadow_offsets = bar_item_calculate_shadow_offsets(bar_item);
+    CGFloat item_width = window->frame.size.width
+                         - shadow_offsets.x - shadow_offsets.y;
+    anchor.x += shadow_offsets.x;
+
     if (bar_item->popup.align == POSITION_CENTER) {
-      anchor.x += (window->frame.size.width
+      anchor.x += (item_width
                    - bar_item->popup.background.bounds.size.width) / 2;
     } else if (bar_item->popup.align == POSITION_LEFT) {
       anchor.x -= bar_item->background.padding_left;
     } else {
-      anchor.x += window->frame.size.width
+      anchor.x += item_width + bar_item->background.padding_right
                   - bar_item->popup.background.bounds.size.width;
     }
     anchor.y += (g_bar_manager.position == POSITION_BOTTOM
@@ -146,6 +153,7 @@ static void bar_check_for_clip_updates(struct bar* bar) {
 
 void bar_draw(struct bar* bar, bool forced) {
   if (bar->sid < 1 || bar->adid < 1) return;
+  if (!bar->window.surface) return;
 
   if (g_bar_manager.might_need_clipping)
     bar_check_for_clip_updates(bar);
@@ -153,6 +161,8 @@ void bar_draw(struct bar* bar, bool forced) {
   if (g_bar_manager.bar_needs_update) {
     struct background background = g_bar_manager.background;
     background.bounds = bar->window.frame;
+    // the top click pad row stays transparent
+    background.bounds.size.height -= bar_top_click_pad();
     background.bounds.origin.y -= background.y_offset;
     background.shadow.enabled = false;
     background.enabled = true;
@@ -192,10 +202,11 @@ void bar_draw(struct bar* bar, bool forced) {
       window_assign_mouse_tracking_area(window, window->frame);
     }
 
+    if (!window->surface) continue;
     CGContextClearRect(window->surface->context, window->frame);
     bar_item_draw(bar_item, window->surface->context);
     CGContextFlush(window->surface->context);
-    if (!resized) window_flush(window);
+    window_flush(window);
   }
 
   if (g_bar_manager.bar_needs_update) {
@@ -212,23 +223,23 @@ static void bar_calculate_bounds_top_bottom(struct bar* bar) {
                                                            bar,
                                                            POSITION_CENTER);
 
-  uint32_t bar_left_first_item_x = max(g_bar_manager.background.padding_left,
-                                       0                                     );
+  int bar_left_first_item_x = max(g_bar_manager.background.padding_left,
+                                  0                                     );
 
-  uint32_t bar_right_first_item_x = bar->window.frame.size.width
-                                   -max(g_bar_manager.background.padding_right,
-                                          0                                  );
+  int bar_right_first_item_x = bar->window.frame.size.width
+                               -max(g_bar_manager.background.padding_right,
+                                    0                                      );
 
-  uint32_t bar_center_first_item_x = (bar->window.frame.size.width
-                                      - center_length) / 2;
+  int bar_center_first_item_x = (bar->window.frame.size.width
+                                 - center_length) / 2;
 
-  uint32_t bar_center_right_first_item_x = (bar->window.frame.size.width
-                                            + notch_width) / 2;
+  int bar_center_right_first_item_x = (bar->window.frame.size.width
+                                       + notch_width) / 2;
 
-  uint32_t bar_center_left_first_item_x = (bar->window.frame.size.width
-                                           - notch_width) / 2;
+  int bar_center_left_first_item_x = (bar->window.frame.size.width
+                                      - notch_width) / 2;
 
-  uint32_t* next_position = NULL;
+  int* next_position = NULL;
   // center content in the real bar, ignoring the top click pad
   uint32_t y = (bar->window.frame.size.height - bar_top_click_pad()) / 2;
 
@@ -258,13 +269,13 @@ static void bar_calculate_bounds_top_bottom(struct bar* bar) {
 
     if (bar_item->position == POSITION_RIGHT
         || bar_item->position == POSITION_CENTER_LEFT) {
-      *next_position = min(*next_position - bar_item_display_length
+      *next_position = min(*next_position - (int)bar_item_display_length
                            - bar_item->background.padding_right,
                            bar->window.frame.size.width
                            - bar_item_display_length               );
     }
     else {
-      *next_position += max((int)-*next_position,
+      *next_position += max(-*next_position,
                             bar_item->background.padding_left);
     }
 
@@ -316,7 +327,12 @@ static void bar_calculate_bounds_top_bottom(struct bar* bar) {
       continue;
     }
 
-    group_calculate_bounds(bar_item->group, bar, y);
+    group_calculate_bounds(bar_item->group,
+                           bar,
+                           y,
+                           bar->window.frame.size.height
+                           - bar_top_click_pad()
+                           - (g_bar_manager.background.border_width + 1));
     window_set_frame(bar_item_get_window(bar_item->group->members[0],
                                          bar->adid                   ),
                      bar_item->group->bounds                           );
@@ -333,24 +349,23 @@ static void bar_calculate_bounds_left_right(struct bar* bar) {
                                                            bar,
                                                            POSITION_CENTER);
 
-  uint32_t bar_left_first_item_y = max(g_bar_manager.background.padding_left,
-                                       0                                     );
+  int bar_left_first_item_y = max(g_bar_manager.background.padding_left,
+                                  0                                     );
 
-  uint32_t bar_right_first_item_y = bar->window.frame.size.height
-                                   -max(g_bar_manager.background.padding_right,
-                                          0                                  );
+  int bar_right_first_item_y = bar->window.frame.size.height
+                               -max(g_bar_manager.background.padding_right,
+                                    0                                      );
 
-  uint32_t bar_center_first_item_y = (bar->window.frame.size.height
-                                      - 2*g_bar_manager.margin
-                                      - center_length) / 2 - 1;
+  int bar_center_first_item_y = (bar->window.frame.size.height
+                                 - center_length) / 2;
 
-  uint32_t bar_center_right_first_item_y = (bar->window.frame.size.height
-                                            + notch_width) / 2;
+  int bar_center_right_first_item_y = (bar->window.frame.size.height
+                                       + notch_width) / 2;
 
-  uint32_t bar_center_left_first_item_y = (bar->window.frame.size.height
-                                           - notch_width) / 2 ;
+  int bar_center_left_first_item_y = (bar->window.frame.size.height
+                                      - notch_width) / 2 ;
 
-  uint32_t* next_position = NULL;
+  int* next_position = NULL;
 
   for (int i = 0; i < g_bar_manager.bar_item_count; i++) {
     struct bar_item* bar_item = g_bar_manager.bar_items[i];
@@ -381,32 +396,34 @@ static void bar_calculate_bounds_left_right(struct bar* bar) {
     if (bar_item->position == POSITION_RIGHT
         || bar_item->position == POSITION_CENTER_LEFT) {
 
-      *next_position = min(*next_position - bar_item_display_height
+      *next_position = min(*next_position - (int)bar_item_display_height
                            - bar_item->background.padding_right,
                            bar->window.frame.size.height
                            - bar_item_display_height               );
     }
     else {
-      *next_position += max((int)-*next_position,
+      *next_position += max(-*next_position,
                             bar_item->background.padding_left);
     }
 
     bar_item->graph.rtl = rtl;
 
+    // the window grows by |y_offset| on the side the content moves toward
     CGPoint shadow_offsets = bar_item_calculate_shadow_offsets(bar_item);
     bar_item_calculate_bounds(bar_item,
                               bar_item_display_height,
                               (g_bar_manager.background.bounds.size.height
                                - bar_item_display_length) / 2.
                               + max(shadow_offsets.x, 0),
-                              bar_item_display_height / 2.);
+                              bar_item_display_height / 2.
+                              + max(-bar_item->y_offset, 0));
 
 
     CGRect frame = {{bar->window.origin.x + x
                      - max(shadow_offsets.x, 0),
                      bar->window.origin.y
                      + *next_position
-                     + -max(-bar_item->y_offset, 0)},
+                     - max(bar_item->y_offset, 0)},
                     {g_bar_manager.background.bounds.size.height,
                      bar_item_display_height + abs(bar_item->y_offset)}};
 
@@ -479,11 +496,14 @@ static CGRect bar_get_frame(struct bar *bar) {
     origin.x += g_bar_manager.margin;
     origin.y += g_bar_manager.background.y_offset + notch_offset;
 
+    CGFloat height = notch_display_height > 0
+                     ? notch_display_height
+                     : g_bar_manager.background.bounds.size.height;
 
     if (g_bar_manager.position == POSITION_BOTTOM) {
       origin.y = CGRectGetMaxY(bounds)
-                 - g_bar_manager.background.bounds.size.height
-                 - 2*(g_bar_manager.background.y_offset) - notch_offset;
+                 - height
+                 - g_bar_manager.background.y_offset - notch_offset;
     } else if (display_menu_bar_visible() && !g_bar_manager.topmost) {
       CGRect menu = display_menu_bar_rect(bar->did);
       origin.y += menu.size.height;
@@ -492,15 +512,9 @@ static CGRect bar_get_frame(struct bar *bar) {
     int pad = bar_top_click_pad();
     origin.y -= pad;
 
-    if (notch_display_height > 0) {
-      return (CGRect) {{origin.x, origin.y},
-                        {bounds.size.width,
-                        g_bar_manager.notch_display_height + pad}};
-    }
-
     return (CGRect) {{origin.x, origin.y},
                       {bounds.size.width,
-                      g_bar_manager.background.bounds.size.height + pad}};
+                      height + pad}};
   }
 }
 

@@ -28,7 +28,7 @@ void alias_setup(struct alias* alias, char* owner, char* name);
 uint32_t alias_get_length(struct alias* alias);
 uint32_t alias_get_height(struct alias* alias);
 
-void alias_calculate_bounds(struct alias* alias, uint32_t x, uint32_t y);
+void alias_calculate_bounds(struct alias* alias, uint32_t x, int y);
 void alias_draw(struct alias* alias, CGContextRef context);
 bool alias_update(struct alias* alias, bool forced);
 void alias_destroy(struct alias* alias);

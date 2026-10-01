@@ -53,6 +53,7 @@ struct surface* surface_create(struct window* window) {
 }
 
 void surface_resize(struct surface* surface, struct window* window) {
+  if (!surface) return;
   if (surface->context) CGContextRelease(surface->context);
   surface->context = context_create(window->frame.size, 2.0f);
 
@@ -60,8 +61,8 @@ void surface_resize(struct surface* surface, struct window* window) {
     SLSTransactionSetSurfaceBounds(g_transaction, window->id,
                                                   surface->id,
                                                   window->frame);
-    // On macOS 26+ layer_set_bounds is defered to the post decode action
-    // scheculed in window.c
+    // the ca commit carrying these bounds is flushed in windows_unfreeze
+    layer_set_bounds(surface->layer, window->frame);
   } else {
     SLSSetSurfaceBounds(g_connection, window->id, surface->id, window->frame);
     layer_set_bounds(surface->layer, window->frame);
@@ -69,7 +70,7 @@ void surface_resize(struct surface* surface, struct window* window) {
 }
 
 void surface_flush(struct surface* surface) {
-  if (!surface->context) return;
+  if (!surface || !surface->context) return;
   CGImageRef content = CGBitmapContextCreateImage(surface->context);
   if (!content) return;
 

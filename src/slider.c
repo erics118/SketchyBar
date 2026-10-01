@@ -68,7 +68,7 @@ uint32_t slider_get_length(struct slider* slider) {
   return slider->background.bounds.size.width;
 }
 
-void slider_calculate_bounds(struct slider* slider, uint32_t x, uint32_t y) {
+void slider_calculate_bounds(struct slider* slider, uint32_t x, int y) {
   background_calculate_bounds(&slider->background,
                               x,
                               y,

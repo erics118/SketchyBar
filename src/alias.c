@@ -304,7 +304,7 @@ void alias_destroy(struct alias* alias) {
   alias->owner = NULL;
 }
 
-void alias_calculate_bounds(struct alias* alias, uint32_t x, uint32_t y) {
+void alias_calculate_bounds(struct alias* alias, uint32_t x, int y) {
   image_calculate_bounds(&alias->image, x, y);
 }
 

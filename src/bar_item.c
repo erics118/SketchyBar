@@ -97,11 +97,13 @@ bool bar_item_is_shown(struct bar_item* bar_item) {
 }
 
 void bar_item_append_associated_bar(struct bar_item* bar_item, uint32_t adid) {
-  bar_item->associated_bar |= (1 << (adid - 1));
+  if (adid < 1 || adid > 32) return;
+  bar_item->associated_bar |= (1u << (adid - 1));
 }
 
 void bar_item_remove_associated_bar(struct bar_item* bar_item, uint32_t adid) {
-  bar_item->associated_bar &= ~(1 << (adid - 1)); 
+  if (adid < 1 || adid > 32) return;
+  bar_item->associated_bar &= ~(1u << (adid - 1));
 }
 
 void bar_item_reset_associated_bar(struct bar_item* bar_item) {
@@ -134,19 +136,27 @@ bool bar_item_update(struct bar_item* bar_item, char* sender, bool forced, struc
   if (((scheduled_update_needed || sender) && should_update) || forced) {
     bar_item->counter = 0;
 
+    struct env_vars item_env_vars;
+    env_vars_init(&item_env_vars);
     if ((bar_item->script && strlen(bar_item->script) > 0)
          || bar_item->event_port                          ) {
       if (!env_vars)
         env_vars = &bar_item->signal_args.env_vars;
       else {
+        for (int i = 0; i < env_vars->count; i++) {
+          env_vars_set(&item_env_vars,
+                       string_copy(env_vars->vars[i]->key),
+                       string_copy(env_vars->vars[i]->value));
+        }
         for (int i = 0; i < bar_item->signal_args.env_vars.count; i++) {
-          env_vars_set(env_vars,
+          env_vars_set(&item_env_vars,
                        string_copy(bar_item->signal_args.env_vars.vars[i]->key),
                        string_copy(bar_item->signal_args.env_vars.vars[i]->value));
         }
-        env_vars_set(env_vars,
+        env_vars_set(&item_env_vars,
                      string_copy("NAME"),
                      string_copy(bar_item->name));
+        env_vars = &item_env_vars;
       }
 
       if (sender)
@@ -169,6 +179,7 @@ bool bar_item_update(struct bar_item* bar_item, char* sender, bool forced, struc
       mach_send_message(bar_item->event_port, message, len, false);
       free(message);
     }
+    env_vars_destroy(&item_env_vars);
   }
 
   return false;
@@ -377,6 +388,8 @@ static bool bar_item_set_width(struct bar_item* bar_item, int width) {
 
 static void bar_item_set_event_port(struct bar_item* bar_item, char* bs_name) {
   mach_port_t port = mach_get_bs_port(bs_name);
+  if (bar_item->event_port)
+    mach_port_deallocate(mach_task_self(), bar_item->event_port);
   bar_item->event_port = port;
 }
 
@@ -476,6 +489,7 @@ bool bar_item_set_position(struct bar_item* bar_item, char* position) {
 
   if (bar_item->parent != NULL){
     popup_remove_item(&bar_item->parent->popup,bar_item);
+    bar_item->parent = NULL;
   }
 
   bar_item->position = position[0];
@@ -620,7 +634,7 @@ CGPoint bar_item_calculate_shadow_offsets(struct bar_item* bar_item) {
 
 uint32_t bar_item_calculate_bounds(struct bar_item* bar_item, uint32_t bar_height, uint32_t x, uint32_t y) {
   uint32_t content_x = x;
-  uint32_t content_y = y;
+  int content_y = y;
 
   uint32_t bar_item_length = bar_item_get_length(bar_item, false);
   uint32_t bar_item_content_length = bar_item_get_content_length(bar_item);
@@ -663,19 +677,6 @@ uint32_t bar_item_calculate_bounds(struct bar_item* bar_item, uint32_t bar_heigh
                             sandwich_position,
                             content_y + bar_item->y_offset);
 
-  if (bar_item->has_graph) {
-    uint32_t height = bar_item->background.enabled
-                      ? (bar_item->background.bounds.size.height
-                         - bar_item->background.border_width - 1)
-                      : (bar_height
-                         - (g_bar_manager.background.border_width + 1));
-
-    graph_calculate_bounds(&bar_item->graph,
-                           sandwich_position,
-                           content_y + bar_item->y_offset,
-                           height                         );
-  }
-
   if (bar_item->background.enabled) {
     uint32_t height = bar_item->background.overrides_height
                       ? bar_item->background.bounds.size.height
@@ -687,6 +688,19 @@ uint32_t bar_item_calculate_bounds(struct bar_item* bar_item, uint32_t bar_heigh
                                 content_y + bar_item->y_offset,
                                 bar_item_length,
                                 height                         );
+  }
+
+  if (bar_item->has_graph) {
+    int height = bar_item->background.enabled
+                 ? ((int)bar_item->background.bounds.size.height
+                    - (int)bar_item->background.border_width - 1)
+                 : ((int)bar_height
+                    - (int)(g_bar_manager.background.border_width + 1));
+
+    graph_calculate_bounds(&bar_item->graph,
+                           sandwich_position,
+                           content_y + bar_item->y_offset,
+                           max(height, 0)                 );
   }
 
   return bar_item_length;
@@ -738,10 +752,15 @@ static void bar_item_clear_pointers(struct bar_item* bar_item) {
   bar_item->script = NULL;
   bar_item->click_script = NULL;
   bar_item->group = NULL;
+  bar_item->parent = NULL;
   bar_item->signal_args.env_vars.vars = NULL;
   bar_item->signal_args.env_vars.count = 0;
   bar_item->windows = NULL;
   bar_item->num_windows = 0;
+  bar_item->graph.y = NULL;
+  bar_item->alias.name = NULL;
+  bar_item->alias.owner = NULL;
+  image_clear_pointers(&bar_item->alias.image);
   text_clear_pointers(&bar_item->icon);
   text_clear_pointers(&bar_item->label);
   background_clear_pointers(&bar_item->background);
@@ -758,6 +777,9 @@ void bar_item_inherit_from_item(struct bar_item* bar_item, struct bar_item* ance
   char* name = bar_item->name;
   char* script = bar_item->script;
   char* click_script = bar_item->click_script;
+
+  if (bar_item->event_port)
+    mach_port_deallocate(mach_task_self(), bar_item->event_port);
 
   memcpy(bar_item, ancestor, sizeof(struct bar_item));
   bar_item_clear_pointers(bar_item);
@@ -784,6 +806,46 @@ void bar_item_inherit_from_item(struct bar_item* bar_item, struct bar_item* ance
   image_copy(&bar_item->label.background.image,
              ancestor->label.background.image.image_ref);
 
+  image_copy(&bar_item->popup.background.image,
+             ancestor->popup.background.image.image_ref);
+
+  image_copy(&bar_item->alias.image, ancestor->alias.image.image_ref);
+
+  if (ancestor->alias.name)
+    bar_item->alias.name = string_copy(ancestor->alias.name);
+  if (ancestor->alias.owner)
+    bar_item->alias.owner = string_copy(ancestor->alias.owner);
+
+  if (ancestor->graph.y) {
+    graph_setup(&bar_item->graph, ancestor->graph.width);
+    memcpy(bar_item->graph.y,
+           ancestor->graph.y,
+           sizeof(float) * ancestor->graph.width);
+  }
+
+  if (bar_item->type == BAR_COMPONENT_GROUP && ancestor->group) {
+    bar_item->group = group_create();
+    group_init(bar_item->group);
+    group_add_member(bar_item->group, bar_item);
+    for (int i = 1; i < ancestor->group->num_members; i++) {
+      group_add_member(bar_item->group, ancestor->group->members[i]);
+    }
+  }
+
+  // the default item's host can be removed without clearing its parent
+  if (ancestor->parent
+      && bar_manager_get_item_index_by_address(&g_bar_manager,
+                                               ancestor->parent) >= 0) {
+    popup_add_item(&ancestor->parent->popup, bar_item);
+  }
+
+  if (bar_item->event_port) {
+    mach_port_mod_refs(mach_task_self(),
+                       bar_item->event_port,
+                       MACH_PORT_RIGHT_SEND,
+                       1                    );
+  }
+
   if (bar_item->type == BAR_COMPONENT_SPACE) {
     env_vars_set(&bar_item->signal_args.env_vars,
                  string_copy("SELECTED"),
@@ -801,6 +863,10 @@ void bar_item_inherit_from_item(struct bar_item* bar_item, struct bar_item* ance
 }
 
 void bar_item_destroy(struct bar_item* bar_item, bool free_memory) {
+  animator_cancel_range(&g_bar_manager.animator,
+                        bar_item,
+                        sizeof(struct bar_item));
+
   if (bar_item->name) free(bar_item->name);
   if (bar_item->script) free(bar_item->script);
   if (bar_item->click_script) free(bar_item->click_script);
@@ -814,8 +880,16 @@ void bar_item_destroy(struct bar_item* bar_item, bool free_memory) {
 
   if (bar_item->group && bar_item->type == BAR_COMPONENT_GROUP)
     group_destroy(bar_item->group);
-  else if (bar_item->group)
-    group_remove_member(bar_item->group, bar_item);
+
+  // nested brackets can list the same item in several groups
+  for (int i = 0; i < g_bar_manager.bar_item_count; i++) {
+    struct bar_item* item = g_bar_manager.bar_items[i];
+    if (item != bar_item && item->type == BAR_COMPONENT_GROUP && item->group)
+      group_remove_member(item->group, bar_item);
+  }
+
+  if (bar_item->event_port)
+    mach_port_deallocate(mach_task_self(), bar_item->event_port);
 
   env_vars_destroy(&bar_item->signal_args.env_vars);
   popup_destroy(&bar_item->popup);
@@ -1147,10 +1221,12 @@ void bar_item_parse_set_message(struct bar_item* bar_item, char* message, FILE* 
     char** list = token_split(token, ',', &count);
     if (list && count > 0) {
       for (int i = 0; i < count; i++) {
-        bar_item_append_associated_space(bar_item,
-                                         1 << strtoul(list[i],
-                                                      NULL,
-                                                      0       ));
+        unsigned long space = strtoul(list[i], NULL, 0);
+        if (space >= 32) {
+          respond(rsp, "[!] Item (%s): Invalid space '%s'\n", bar_item->name, list[i]);
+          continue;
+        }
+        bar_item_append_associated_space(bar_item, 1u << space);
       }
       free(list);
     }
@@ -1169,10 +1245,12 @@ void bar_item_parse_set_message(struct bar_item* bar_item, char* message, FILE* 
           bar_item->associated_to_active_display = true;
         }
         else {
-          bar_item_append_associated_display(bar_item,
-                                             1 << strtoul(list[i],
-                                                          NULL,
-                                                          0       ));
+          unsigned long display = strtoul(list[i], NULL, 0);
+          if (display >= 32) {
+            respond(rsp, "[!] Item (%s): Invalid display '%s'\n", bar_item->name, list[i]);
+            continue;
+          }
+          bar_item_append_associated_display(bar_item, 1u << display);
         }
       }
       free(list);
@@ -1221,7 +1299,10 @@ void bar_item_parse_set_message(struct bar_item* bar_item, char* message, FILE* 
                                                           bar_item->ignore_association);
     needs_refresh = true;
   } else if (token_equals(property, COMMAND_DEFAULT_RESET)) {
+    bar_item_destroy(&g_bar_manager.default_item, false);
+    memset(&g_bar_manager.default_item, 0, sizeof(struct bar_item));
     bar_item_init(&g_bar_manager.default_item, NULL);
+    bar_item_set_name(&g_bar_manager.default_item, string_copy("defaults"));
   } else if (token_equals(property, PROPERTY_EVENT_PORT)) {
     struct token token = get_token(&message);
     if (token.text && token.length > 0)
@@ -1257,6 +1338,11 @@ void bar_item_parse_subscribe_message(struct bar_item* bar_item, char* message, 
     }
 
     bar_item->update_mask |= event_flag;
+
+    // after the mask, so the first event reaches this item
+    if (event_flag & UPDATE_BATTERY_CHANGE) {
+      begin_receiving_battery_events();
+    }
 
     if (!event_flag) {
       respond(rsp, "[?] Event: '%s' not found\n", event.text);

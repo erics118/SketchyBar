@@ -54,6 +54,10 @@ void layer_set_contents(struct layer* layer, CGImageRef image) {
   typed_layer.contents = (id)image;
 }
 
+void layers_flush() {
+  [CATransaction flush];
+}
+
 void layer_destroy(struct layer* layer) {
   CAContext* typed_context = (CAContext*)layer->context;
   typed_context.layer = nil;

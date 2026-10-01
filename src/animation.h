@@ -120,6 +120,7 @@ void animator_add(struct animator* animator, struct animation* animation);
 
 bool animator_cancel(struct animator* animator, void* target, animator_function* function);
 void animator_cancel_locked(struct animator* animator, void* target, animator_function* function);
+void animator_cancel_range(struct animator* animator, void* start, size_t size);
 
 bool animator_update(struct animator* animator, uint64_t time);
 void animator_lock(struct animator* animator);

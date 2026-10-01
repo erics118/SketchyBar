@@ -102,6 +102,8 @@
 #define PROPERTY_EVENT_PORT                    "mach_helper"
 #define PROPERTY_PERCENTAGE                    "percentage"
 #define PROPERTY_MAX_CHARS                     "max_chars"
+#define PROPERTY_VARIABLE_VALUE_MODE           "variable_value_mode"
+#define PROPERTY_SYMBOL_COLOR                  "symbol_color"
 
 #define DOMAIN_BAR                             "--bar"
 #define PROPERTY_POSITION                      "position"
@@ -130,6 +132,7 @@
 #define COMMAND_SUBSCRIBE_WIFI_CHANGE          "wifi_change"
 #define COMMAND_SUBSCRIBE_BRIGHTNESS_CHANGE    "brightness_change"
 #define COMMAND_SUBSCRIBE_POWER_SOURCE_CHANGE  "power_source_change"
+#define COMMAND_SUBSCRIBE_BATTERY_CHANGE       "battery_change"
 #define COMMAND_SUBSCRIBE_MEDIA_CHANGE         "media_change"
 #define COMMAND_SUBSCRIBE_MOUSE_ENTERED        "mouse.entered"
 #define COMMAND_SUBSCRIBE_MOUSE_EXITED         "mouse.exited"
@@ -167,6 +170,10 @@
 #define ARGUMENT_COMMON_VAL_TOGGLE             "toggle"
 #define ARGUMENT_COMMON_VAL_BEFORE             "before"
 #define ARGUMENT_COMMON_VAL_AFTER              "after"
+
+#define ARGUMENT_VAR_MODE_AUTOMATIC            "automatic"
+#define ARGUMENT_VAR_MODE_COLOR                "color"
+#define ARGUMENT_VAR_MODE_DRAW                 "draw"
 
 #define ARGUMENT_DISPLAY_MAIN                  "main"
 #define ARGUMENT_DISPLAY_ALL                   "all"

@@ -7,6 +7,7 @@ struct text_line {
   CTLineRef line;
   CGFloat ascent;
   CGFloat descent;
+  CGFloat ink_offset;
 };
 
 struct text {
@@ -46,7 +47,7 @@ bool text_set_font(struct text* text, char* font_string, bool forced);
 void text_copy(struct text* text, struct text* source);
 
 bool text_animate_scroll(struct text* text);
-void text_calculate_bounds(struct text* text, uint32_t x, uint32_t y);
+void text_calculate_bounds(struct text* text, uint32_t x, int y);
 void text_draw(struct text* text, CGContextRef context);
 void text_destroy(struct text* text);
 

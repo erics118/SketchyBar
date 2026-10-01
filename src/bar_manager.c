@@ -544,6 +544,7 @@ void bar_manager_update(struct bar_manager* bar_manager, bool forced) {
     forced_volume_event();
     forced_brightness_event();
     forced_power_event();
+    forced_battery_event();
     forced_front_app_event();
     forced_media_change_event();
     forced_space_windows_event();
@@ -896,6 +897,16 @@ void bar_manager_handle_power_source_change(struct bar_manager* bar_manager, cha
   env_vars_destroy(&env_vars);
 }
 
+void bar_manager_handle_battery_change(struct bar_manager* bar_manager, char* state) {
+  struct env_vars env_vars;
+  env_vars_init(&env_vars);
+  env_vars_set(&env_vars, string_copy("INFO"), string_copy(state));
+  bar_manager_custom_events_trigger(bar_manager,
+                                    COMMAND_SUBSCRIBE_BATTERY_CHANGE,
+                                    &env_vars                        );
+  env_vars_destroy(&env_vars);
+}
+
 void bar_manager_handle_media_change(struct bar_manager* bar_manager, char* info) {
   struct env_vars env_vars;
   env_vars_init(&env_vars);
@@ -942,7 +953,9 @@ void bar_manager_handle_space_windows_change(struct bar_manager* bar_manager, ch
 void bar_manager_handle_space_change(struct bar_manager* bar_manager, bool forced) {
   struct env_vars env_vars;
   env_vars_init(&env_vars);
-  char info[19 * bar_manager->bar_count + 4];
+  // each entry is at most 37 bytes with two full width ints
+  uint32_t info_size = 40 * bar_manager->bar_count + 4;
+  char info[info_size];
   info[0] = '{';
   info[1] = '\n';
   uint32_t cursor = 2;
@@ -968,7 +981,7 @@ void bar_manager_handle_space_change(struct bar_manager* bar_manager, bool force
     if (i == bar_manager->bar_count - 1)
       separator[0] = '\0';
 
-    snprintf(info + cursor, 19 * bar_manager->bar_count + 4 - cursor,
+    snprintf(info + cursor, info_size - cursor,
                             "\t\"display-%d\": %d%s\n",
                             bar_manager->bars[i]->adid,
                             bar_manager->bars[i]->sid,

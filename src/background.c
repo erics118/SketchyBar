@@ -168,9 +168,9 @@ void background_clip_bar(struct background* background, int offset, struct bar* 
             background->corner_radius);
 }
 
-void background_calculate_bounds(struct background* background, uint32_t x, uint32_t y, uint32_t width, uint32_t height) {
+void background_calculate_bounds(struct background* background, uint32_t x, int y, uint32_t width, uint32_t height) {
   background->bounds.origin.x = x;
-  background->bounds.origin.y = y - height / 2;
+  background->bounds.origin.y = y - (int)(height / 2);
   background->bounds.size.width = width;
   background->bounds.size.height = height;
 

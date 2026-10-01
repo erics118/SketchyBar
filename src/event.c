@@ -92,7 +92,9 @@ static void event_mouse_up(void* context) {
   CGPoint point_in_window_coords = CGPointZero;
   if (bar_item && window) {
     point_in_window_coords.x = point.x - window->origin.x;
-    point_in_window_coords.y = point.y - window->origin.y;
+    // item bounds are bottom-up, screen points are top-down
+    point_in_window_coords.y = window->frame.size.height
+                               - (point.y - window->origin.y);
   }
 
   bar_item_on_click(bar_item,
@@ -119,7 +121,8 @@ static void event_mouse_dragged(void* context) {
   CGPoint point_in_window_coords = CGPointZero;
   if (bar_item && window) {
     point_in_window_coords.x = point.x - window->origin.x;
-    point_in_window_coords.y = point.y - window->origin.y;
+    point_in_window_coords.y = window->frame.size.height
+                               - (point.y - window->origin.y);
   }
 
   bar_item_on_drag(bar_item, point_in_window_coords);
@@ -234,27 +237,13 @@ static void event_mouse_exited(void* context) {
 struct {
   uint64_t timestamp;
   int delta_y;
+  bool flush_pending;
+  CGPoint point;
+  uint32_t wid;
+  uint32_t modifier_keys;
 } g_scroll_info;
 
-static void event_mouse_scrolled(void* context) {
-  CGPoint point = CGEventGetLocation(context);
-  uint32_t wid = get_wid_from_cg_event(context);
-  int scroll_delta
-    = CGEventGetIntegerValueField(context,
-        kCGScrollWheelEventDeltaAxis1);
-  uint32_t modifier_keys = CGEventGetFlags(context);
-
-  uint64_t event_time = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW_APPROX);
-  if (g_scroll_info.timestamp + SCROLL_TIMEOUT > event_time) {
-    g_scroll_info.delta_y += scroll_delta;
-    return;
-  } else {
-    if (g_scroll_info.timestamp + 2*SCROLL_TIMEOUT < event_time)
-      g_scroll_info.delta_y = 0;
-    g_scroll_info.timestamp
-      = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW_APPROX);
-  }
-
+static void event_mouse_scrolled_deliver(CGPoint point, uint32_t wid, int scroll_delta, uint32_t modifier_keys) {
   struct bar_item* bar_item = bar_manager_get_item_by_wid(&g_bar_manager,
                                                           wid,
                                                           NULL           );
@@ -307,6 +296,45 @@ static void event_mouse_scrolled(void* context) {
   g_scroll_info.delta_y = 0;
 }
 
+static void event_mouse_scrolled(void* context) {
+  CGPoint point = CGEventGetLocation(context);
+  uint32_t wid = get_wid_from_cg_event(context);
+  int scroll_delta
+    = CGEventGetIntegerValueField(context,
+        kCGScrollWheelEventDeltaAxis1);
+  uint32_t modifier_keys = CGEventGetFlags(context);
+
+  uint64_t event_time = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW_APPROX);
+  if (g_scroll_info.timestamp + SCROLL_TIMEOUT > event_time) {
+    g_scroll_info.delta_y += scroll_delta;
+    g_scroll_info.point = point;
+    g_scroll_info.wid = wid;
+    g_scroll_info.modifier_keys = modifier_keys;
+
+    // deliver the withheld delta once the timeout passes
+    if (!g_scroll_info.flush_pending) {
+      g_scroll_info.flush_pending = true;
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
+                                   g_scroll_info.timestamp
+                                   + SCROLL_TIMEOUT - event_time),
+                     dispatch_get_main_queue(), ^{
+        g_scroll_info.flush_pending = false;
+        if (!g_scroll_info.delta_y) return;
+        g_scroll_info.timestamp
+          = clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW_APPROX);
+        event_mouse_scrolled_deliver(g_scroll_info.point,
+                                     g_scroll_info.wid,
+                                     0,
+                                     g_scroll_info.modifier_keys);
+      });
+    }
+    return;
+  }
+
+  g_scroll_info.timestamp = event_time;
+  event_mouse_scrolled_deliver(point, wid, scroll_delta, modifier_keys);
+}
+
 
 static void event_volume_changed(void* context) {
   bar_manager_handle_volume_change(&g_bar_manager, *(float*)context);
@@ -322,6 +350,10 @@ static void event_brightness_changed(void* context) {
 
 static void event_power_source_changed(void* context) {
   bar_manager_handle_power_source_change(&g_bar_manager, (char*)context);
+}
+
+static void event_battery_changed(void* context) {
+  bar_manager_handle_battery_change(&g_bar_manager, (char*)context);
 }
 
 static void event_media_changed(void* context) {
@@ -361,6 +393,7 @@ static callback_type* event_handler[] = {
   [WIFI_CHANGED]               = event_wifi_changed,
   [BRIGHTNESS_CHANGED]         = event_brightness_changed,
   [POWER_SOURCE_CHANGED]       = event_power_source_changed,
+  [BATTERY_CHANGED]            = event_battery_changed,
   [MEDIA_CHANGED]              = event_media_changed,
   [COVER_CHANGED]              = event_cover_changed,
   [DISTRIBUTED_NOTIFICATION]   = event_distributed_notification,

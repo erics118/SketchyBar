@@ -402,10 +402,13 @@ static inline char* resolve_path(char* path) {
 
   if (path[0] == '~') {
     char* home = getenv("HOME");
-    char buf[512];
-    snprintf(buf, sizeof(buf), "%s%s", home, &path[1]);
+    if (!home) return path;
+    // the '~' slot holds the null terminator
+    size_t length = strlen(home) + strlen(path);
+    char* resolved = malloc(length);
+    snprintf(resolved, length, "%s%s", home, &path[1]);
     free(path);
-    return string_copy(buf);
+    return resolved;
   }
   return path;
 }
@@ -438,28 +441,51 @@ static inline bool ensure_executable_permission(char *filename) {
   return true;
 }
 
-static inline bool sync_exec(char *command, struct env_vars *env_vars) {
-  if (env_vars) {
-    for (int i = 0; i < env_vars->count; i++) {
-      setenv(env_vars->vars[i]->key, env_vars->vars[i]->value, 1);
+// the child may only make async-signal-safe calls, so argv and envp are
+// built before the fork
+static inline bool fork_exec(char *command, struct env_vars* env_vars) {
+  extern char** environ;
+  uint32_t var_count = env_vars ? env_vars->count : 0;
+  uint32_t environ_count = 0;
+  while (environ[environ_count]) environ_count++;
+
+  char** envp = malloc(sizeof(char*) * (environ_count + var_count + 1));
+  uint32_t envp_count = 0;
+  for (uint32_t i = 0; i < environ_count; i++) {
+    bool overridden = false;
+    for (uint32_t j = 0; j < var_count; j++) {
+      size_t key_length = strlen(env_vars->vars[j]->key);
+      if (strncmp(environ[i], env_vars->vars[j]->key, key_length) == 0
+          && environ[i][key_length] == '=') {
+        overridden = true;
+        break;
+      }
     }
+    if (!overridden) envp[envp_count++] = environ[i];
   }
 
-  char *exec[] = { "/usr/bin/env", "sh", "-c", command, NULL};
-  return execvp(exec[0], exec);
-}
+  uint32_t first_var = envp_count;
+  for (uint32_t i = 0; i < var_count; i++) {
+    size_t length = strlen(env_vars->vars[i]->key)
+                    + strlen(env_vars->vars[i]->value) + 2;
+    envp[envp_count] = malloc(length);
+    snprintf(envp[envp_count++], length, "%s=%s", env_vars->vars[i]->key,
+                                                  env_vars->vars[i]->value);
+  }
+  envp[envp_count] = NULL;
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-static inline bool fork_exec(char *command, struct env_vars* env_vars) {
-  int pid = vfork();
-  if (pid == -1) return false;
-  if (pid !=  0) return true;
+  char* argv[] = { "/usr/bin/env", "sh", "-c", command, NULL };
+  int pid = fork();
+  if (pid == 0) {
+    alarm(FORK_TIMEOUT);
+    execve(argv[0], argv, envp);
+    _exit(1);
+  }
 
-  alarm(FORK_TIMEOUT);
-  exit(sync_exec(command, env_vars));
+  for (uint32_t i = first_var; i < envp_count; i++) free(envp[i]);
+  free(envp);
+  return pid != -1;
 }
-#pragma clang diagnostic pop
 
 static inline int mission_control_index(uint64_t sid) {
   uint64_t result = 0;

@@ -9,4 +9,5 @@ int workspace_display_notch_height(uint32_t did);
 float workspace_get_scale();
 
 CGImageRef workspace_icon_for_app(char* app);
+CGImageRef workspace_icon_for_symbol(char* name, float value, int mode, uint32_t color, bool has_color, float scale);
 char* workspace_copy_app_name_for_pid(pid_t pid);

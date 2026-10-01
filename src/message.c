@@ -39,6 +39,9 @@ static struct bar_item** get_bar_items_for_regex(struct token reg, FILE* rsp, ui
       char buf[1024];
       regerror(reti, &regex, buf, sizeof(buf));
       respond(rsp, "[!] Regex: Regex match failed '%s'\n", buf);
+      regfree(&regex);
+      if (bar_items) free(bar_items);
+      *count = 0;
       return NULL;
     }
   }
@@ -94,6 +97,8 @@ static void handle_domain_trigger(FILE* rsp, struct token domain, char* message)
     forced_network_event();
   } else if (token_equals(event, COMMAND_SUBSCRIBE_POWER_SOURCE_CHANGE)) {
     forced_power_event();
+  } else if (token_equals(event, COMMAND_SUBSCRIBE_BATTERY_CHANGE)) {
+    forced_battery_event();
   } else {
     bar_manager_custom_events_trigger(&g_bar_manager, event.text, &env_vars);
   }
@@ -174,13 +179,15 @@ static void handle_domain_add(FILE* rsp, struct token domain, char* message) {
 
   if (token_equals(command, COMMAND_ADD_EVENT)) {
     struct token event = get_token(&message);
-    if (strlen(message) > 0)
-      custom_events_append(&g_bar_manager.custom_events,
-                           token_to_string(event),
-                           token_to_string(get_token(&message)));
-    else custom_events_append(&g_bar_manager.custom_events,
+    char* notification = strlen(message) > 0
+                         ? token_to_string(get_token(&message))
+                         : NULL;
+
+    if (!custom_events_append(&g_bar_manager.custom_events,
                               token_to_string(event),
-                              NULL                         );
+                              notification                 )) {
+      respond(rsp, "[!] Add Event: Event limit reached, could not add '%s'\n", event.text);
+    }
     return;
   }
 
@@ -276,7 +283,8 @@ static void handle_domain_add(FILE* rsp, struct token domain, char* message) {
         if (bar_items && count > 0) {
           for (int i = 0; i < count; i++) {
             if (first) {
-              if (bar_items[i]->position == POSITION_POPUP) {
+              if (bar_items[i]->position == POSITION_POPUP
+                  && bar_items[i]->parent                 ) {
                 popup_add_item(&bar_items[i]->parent->popup, bar_item);
                 bar_item->position = POSITION_POPUP;
               }
@@ -287,7 +295,7 @@ static void handle_domain_add(FILE* rsp, struct token domain, char* message) {
           free(bar_items);
         } else if (first) {
           bar_manager_remove_item(&g_bar_manager, bar_item);
-          break;
+          return;
         }
         member = get_token(&message);
       }
@@ -424,7 +432,12 @@ static bool handle_domain_bar(FILE *rsp, struct token domain, char *message) {
           display_pattern = DISPLAY_MAIN_PATTERN;
         }
         else {
-          display_pattern |= 1 << (strtoul(list[i], NULL, 0) - 1);
+          unsigned long display = strtoul(list[i], NULL, 0);
+          if (display < 1 || display > 32) {
+            respond(rsp, "[!] Bar: Invalid display '%s'\n", list[i]);
+            continue;
+          }
+          display_pattern |= 1u << (display - 1);
         }
       }
       free(list);
@@ -580,6 +593,14 @@ static void handle_domain_order(FILE* rsp, struct token domain, char* message) {
     int index = bar_manager_get_item_index_for_name(&g_bar_manager, name.text);
     if (index < 0) {
       respond(rsp, "[!] Order: Item '%s' not found\n", name.text);
+      name = get_token(&message);
+      continue;
+    }
+    bool duplicate = false;
+    for (uint32_t i = 0; i < count; i++) {
+      if (ordering[i] == g_bar_manager.bar_items[index]) duplicate = true;
+    }
+    if (duplicate) {
       name = get_token(&message);
       continue;
     }

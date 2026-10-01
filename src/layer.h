@@ -15,3 +15,4 @@ void layer_destroy(struct layer* layer);
 uint32_t layer_get_context_id(struct layer* layer);
 void layer_set_bounds(struct layer* layer, CGRect bounds);
 void layer_set_contents(struct layer* layer, CGImageRef image);
+void layers_flush();

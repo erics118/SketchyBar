@@ -21,12 +21,12 @@ void graph_setup(struct graph* graph, uint32_t width) {
 }
 
 float graph_get_y(struct graph* graph, uint32_t i) {
-  if (!graph->enabled) return 0.f;
+  if (!graph->enabled || !graph->y || !graph->width) return 0.f;
   return graph->y[ (graph->cursor + i)%graph->width ];
 }
 
 void graph_push_back(struct graph* graph, float y) {
-  if (!graph->enabled) return;
+  if (!graph->enabled || !graph->y || !graph->width) return;
   graph->y[graph->cursor] = y;
 
   ++graph->cursor;
@@ -38,7 +38,7 @@ uint32_t graph_get_length(struct graph* graph) {
   return 0;
 }
 
-void graph_calculate_bounds(struct graph* graph, uint32_t x, uint32_t y, uint32_t height) {
+void graph_calculate_bounds(struct graph* graph, uint32_t x, int y, uint32_t height) {
   graph->bounds.size.height = height;
   graph->bounds.origin.x = x;
   graph->bounds.origin.y = y - graph->bounds.size.height / 2
@@ -46,6 +46,7 @@ void graph_calculate_bounds(struct graph* graph, uint32_t x, uint32_t y, uint32_
 }
 
 void graph_draw(struct graph* graph, CGContextRef context) {
+  if (!graph->y || !graph->width) return;
   uint32_t x =  graph->bounds.origin.x + (graph->rtl ? graph->width : 0);
   uint32_t y = graph->bounds.origin.y;
   uint32_t height = graph->bounds.size.height;

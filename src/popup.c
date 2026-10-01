@@ -74,6 +74,7 @@ static void popup_order_windows(struct popup* popup) {
 static void popup_calculate_popup_anchor_for_bar_item(struct popup* popup, struct bar_item* bar_item, struct bar* bar) {
   if (popup->adid != g_bar_manager.active_adid) return;
   struct window* window = bar_item_get_window(bar_item, popup->adid);
+  if (!window) return;
 
   if (!bar_item->popup.overrides_cell_size)
     bar_item->popup.cell_size = window->frame.size.height;
@@ -82,13 +83,18 @@ static void popup_calculate_popup_anchor_for_bar_item(struct popup* popup, struc
 
   CGPoint anchor = window->origin;
   if (bar_item->position != POSITION_POPUP || popup->horizontal) {
+    CGPoint shadow_offsets = bar_item_calculate_shadow_offsets(bar_item);
+    CGFloat item_width = window->frame.size.width
+                         - shadow_offsets.x - shadow_offsets.y;
+    anchor.x += shadow_offsets.x;
+
     if (bar_item->popup.align == POSITION_CENTER) {
-      anchor.x += (window->frame.size.width
+      anchor.x += (item_width
                    - bar_item->popup.background.bounds.size.width) / 2;
     } else if (bar_item->popup.align == POSITION_LEFT) {
       anchor.x -= bar_item->background.padding_left;
     } else {
-      anchor.x += window->frame.size.width
+      anchor.x += item_width + bar_item->background.padding_right
                   - bar_item->popup.background.bounds.size.width;
     }
     anchor.y += (g_bar_manager.position == POSITION_BOTTOM
@@ -109,16 +115,21 @@ static void popup_calculate_popup_anchor_for_bar_item(struct popup* popup, struc
 }
 
 void popup_calculate_bounds(struct popup* popup, struct bar* bar) {
-  uint32_t y = popup->background.border_width;
-  uint32_t x = 0;
+  uint32_t border_width = popup->background.border_width;
+  uint32_t y = border_width;
+  uint32_t x = border_width;
   uint32_t total_item_width = 0;
   uint32_t width = 0;
   uint32_t height = 0;
+  uint32_t image_width = 0;
+  uint32_t image_height = 0;
 
   if (popup->background.enabled
       && popup->background.image.enabled) {
-    uint32_t image_width = image_get_size(&popup->background.image).width;
-    width = image_width + 2*popup->background.border_width;
+    CGSize image_size = image_get_size(&popup->background.image);
+    image_width = image_size.width;
+    image_height = image_size.height;
+    width = image_width + 2*border_width;
   }
 
   if (popup->horizontal) {
@@ -136,13 +147,9 @@ void popup_calculate_bounds(struct popup* popup, struct bar* bar) {
       if (cell_height > height && popup->horizontal) height = cell_height;
     }
 
-    if (popup->background.enabled
-        && popup->background.image.enabled) {
-      uint32_t image_height = image_get_size(&popup->background.image).height;
-      if (image_height > height) height = image_height;
-      
-      x = (width - total_item_width) / 2;
-    }
+    if (image_height > height) height = image_height;
+    if (image_width > total_item_width)
+      x += (image_width - total_item_width) / 2;
   }
 
   for (int j = 0; j < popup->num_items; j++) {
@@ -158,18 +165,21 @@ void popup_calculate_bounds(struct popup* popup, struct bar* bar) {
     uint32_t item_height = popup->horizontal ? height : cell_height;
     uint32_t item_y = item_height / 2;
 
+    CGPoint shadow_offsets = bar_item_calculate_shadow_offsets(bar_item);
     uint32_t item_width = bar_item->background.padding_right
                           + bar_item->background.padding_left
                           + bar_item_calculate_bounds(bar_item,
                                                       item_height,
-                                                      0,
+                                                      max(shadow_offsets.x, 0),
                                                       item_y      );
 
     uint32_t bar_item_display_length = bar_item_get_length(bar_item, true);
     if (popup->adid > 0) {
-      CGRect frame = {{popup->anchor.x + item_x,
+      CGRect frame = {{popup->anchor.x + item_x - max(shadow_offsets.x, 0),
                        popup->anchor.y + y},
-                      {bar_item_display_length,
+                      {bar_item_display_length
+                        + shadow_offsets.x
+                        + shadow_offsets.y,
                        item_height             }  };
 
       window_set_frame(bar_item_get_window(bar_item, popup->adid), frame);
@@ -178,7 +188,8 @@ void popup_calculate_bounds(struct popup* popup, struct bar* bar) {
     if (bar_item->popup.drawing)
       popup_calculate_popup_anchor_for_bar_item(popup, bar_item, bar);
 
-    if (item_width > width && !popup->horizontal) width = item_width;
+    if (item_width + 2*border_width > width && !popup->horizontal)
+      width = item_width + 2*border_width;
     if (popup->horizontal) x += item_width;
     else y += cell_height;
   }
@@ -191,7 +202,7 @@ void popup_calculate_bounds(struct popup* popup, struct bar* bar) {
     if (bar_item->type != BAR_COMPONENT_GROUP) continue;
 
     uint32_t cell_height = popup->cell_size;
-    if (bar_item->group->num_members > 2) {
+    if (bar_item->group->num_members > 1) {
       cell_height = max(bar_item_get_height(bar_item->group->members[1]),
                         popup->cell_size                                 );
     }
@@ -199,7 +210,7 @@ void popup_calculate_bounds(struct popup* popup, struct bar* bar) {
     uint32_t item_height = popup->horizontal ? height : cell_height;
     uint32_t item_y = item_height / 2;
 
-    group_calculate_bounds(bar_item->group, bar, item_y);
+    group_calculate_bounds(bar_item->group, bar, item_y, item_height);
 
     window_set_frame(bar_item_get_window(bar_item->group->members[0],
                                          popup->adid                 ),
@@ -208,15 +219,13 @@ void popup_calculate_bounds(struct popup* popup, struct bar* bar) {
 
 
   if (popup->horizontal) {
-    if (!popup->background.enabled || !popup->background.image.enabled) {
-      width = x + popup->background.border_width;
-    }
+    if (x + border_width > width) width = x + border_width;
     y += height;
   }
-  else if (!popup->background.enabled || !popup->background.image.enabled) {
-    width += popup->background.border_width;
+  else if (border_width + image_height > y) {
+    y = border_width + image_height;
   }
-  y += popup->background.border_width;
+  y += border_width;
 
   popup->background.bounds.size.width = width;
   popup->background.bounds.size.height = y;
@@ -314,6 +323,7 @@ void popup_clear_pointers(struct popup* popup) {
   popup->num_items = 0;
   popup->host = NULL;
   window_clear(&popup->window);
+  background_clear_pointers(&popup->background);
 }
 
 bool popup_set_drawing(struct popup* popup, bool drawing) {
@@ -332,6 +342,7 @@ void popup_draw(struct popup* popup) {
 
   if (!window_apply_frame(&popup->window, false) && !popup->host->needs_update)
     return;
+  if (!popup->window.surface) return;
 
   CGContextClearRect(popup->window.surface->context, popup->background.bounds);
 

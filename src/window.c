@@ -11,6 +11,32 @@ extern CGError (* SBSLSTransactionAddPostDecodeAction)(CFTypeRef, void (^)());
 
 int g_space = 0;
 
+// open windows, so deferred blocks skip windows closed or freed meanwhile
+static struct window** g_open_windows = NULL;
+static uint32_t g_open_window_count = 0;
+
+static void window_register(struct window* window) {
+  g_open_windows = realloc(g_open_windows,
+                           sizeof(struct window*)*(g_open_window_count + 1));
+  g_open_windows[g_open_window_count++] = window;
+}
+
+static void window_unregister(struct window* window) {
+  for (uint32_t i = 0; i < g_open_window_count; i++) {
+    if (g_open_windows[i] == window) {
+      g_open_windows[i] = g_open_windows[--g_open_window_count];
+      return;
+    }
+  }
+}
+
+static bool window_is_open(struct window* window, uint32_t id) {
+  for (uint32_t i = 0; i < g_open_window_count; i++) {
+    if (g_open_windows[i] == window) return window->id == id;
+  }
+  return false;
+}
+
 void window_init(struct window* window) {
   window->context = NULL;
   window->surface = NULL;
@@ -79,6 +105,7 @@ void window_open(struct window* window, CGRect frame) {
   CFRelease(frame_region);
 
   window->id = id;
+  if (id) window_register(window);
 
   SLSSetWindowResolution(g_connection, window->id, 2.0f);
   SLSSetWindowTags(g_connection, window->id, &set_tags, 64);
@@ -152,7 +179,8 @@ void windows_unfreeze() {
     CFRelease(g_transaction);
     g_transaction = NULL;
 
-    if (__builtin_available(macOS 26.0, *)) { }
+    // send layer bounds and contents right behind the window shape commit
+    if (__builtin_available(macOS 26.0, *)) layers_flush();
     else SLSReenableUpdate(g_connection);
   }
 }
@@ -194,11 +222,11 @@ void window_move(struct window* window, CGPoint point) {
 
 }
 
-static void window_defer_update(struct window* window) {
+static void window_defer_update(struct window* window, uint32_t id) {
   void (^block)() = ^{
-    if (!window->surface) return;
+    if (!window_is_open(window, id)) return;
     if (--window->refc <= 0) window_destroy(window);
-    else {
+    else if (window->surface) {
       layer_set_bounds(window->surface->layer, window->frame);
       window_flush(window);
     }
@@ -212,6 +240,7 @@ bool window_apply_frame(struct window* window, bool forced) {
   if (window->needs_resize || forced) {
     windows_freeze();
     CFTypeRef frame_region = window_create_region(window, window->frame);
+    uint32_t id = window->id;
     window->refc++;
 
     if (__builtin_available(macOS 26.0, *)) {
@@ -222,9 +251,9 @@ bool window_apply_frame(struct window* window, bool forced) {
       window_move(window, window->origin);
       if (SBSLSTransactionAddPostDecodeAction) {
         SBSLSTransactionAddPostDecodeAction(g_transaction, ^{
-          window_defer_update(window);
+          window_defer_update(window, id);
         });
-      } else window_defer_update(window);
+      } else window_defer_update(window, id);
     }
     else if (__builtin_available(macOS 13.0, *)) {
       // Ventura and later
@@ -234,7 +263,7 @@ bool window_apply_frame(struct window* window, bool forced) {
                                       frame_region);
       window_clear_background(window);
       window_move(window, window->origin);
-      window_defer_update(window);
+      window_defer_update(window, id);
     } else {
       // Monterey and previous
       if (window->parent) {
@@ -248,7 +277,7 @@ bool window_apply_frame(struct window* window, bool forced) {
         window_order(window, window->parent, window->order_mode);
       }
       window_move(window, window->origin);
-      window_defer_update(window);
+      window_defer_update(window, id);
     }
 
     surface_resize(window->surface, window);
@@ -281,6 +310,7 @@ void window_send_to_space(struct window* window, uint64_t dsid) {
 void window_close(struct window* window) {
   if (!window->id) return;
 
+  window_unregister(window);
   SLSOrderWindow(g_connection, window->id, 0, 0);
   surface_destroy(window->surface);
   if (window->context) CGContextRelease(window->context);

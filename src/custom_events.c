@@ -38,13 +38,20 @@ void custom_events_init(struct custom_events* custom_events) {
   custom_events_append(custom_events, string_copy(COMMAND_SUBSCRIBE_WIFI_CHANGE), NULL);
   custom_events_append(custom_events, string_copy(COMMAND_SUBSCRIBE_MEDIA_CHANGE), NULL);
   custom_events_append(custom_events, string_copy(COMMAND_SUBSCRIBE_SPACE_WINDOWS_CHANGE), NULL);
+  custom_events_append(custom_events, string_copy(COMMAND_SUBSCRIBE_BATTERY_CHANGE), NULL);
 }
 
-void custom_events_append(struct custom_events* custom_events, char* name, char* notification) {
-  if (custom_events_get_flag_for_name(custom_events, name) > 0) { 
+bool custom_events_append(struct custom_events* custom_events, char* name, char* notification) {
+  if (custom_events_get_flag_for_name(custom_events, name) > 0) {
     if (name) free(name);
     if (notification) free(notification);
-    return; 
+    return true;
+  }
+  // each event owns one bit of the 64 bit update mask
+  if (custom_events->count >= 64) {
+    if (name) free(name);
+    if (notification) free(notification);
+    return false;
   }
   custom_events->count++;
   custom_events->events = (struct custom_event**) realloc(
@@ -56,6 +63,7 @@ void custom_events_append(struct custom_events* custom_events, char* name, char*
   custom_events->events[custom_events->count - 1]->notification = notification;
   if (notification)
     workspace_create_custom_observer(&g_workspace_context, notification);
+  return true;
 }
 
 uint64_t custom_events_get_flag_for_name(struct custom_events* custom_events, char* name) {

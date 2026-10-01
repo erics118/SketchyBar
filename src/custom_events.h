@@ -19,6 +19,7 @@
 #define UPDATE_WIFI_CHANGE          (1ULL << 15)
 #define UPDATE_MEDIA_CHANGE         (1ULL << 16)
 #define UPDATE_SPACE_WINDOWS_CHANGE (1ULL << 17)
+#define UPDATE_BATTERY_CHANGE       (1ULL << 18)
 
 extern void* g_workspace_context;
 extern void workspace_create_custom_observer(void** context, char* name);
@@ -36,7 +37,7 @@ struct custom_events {
 };
 
 void custom_events_init(struct custom_events* custom_events);
-void custom_events_append(struct custom_events* custom_events, char* name, char* notification);
+bool custom_events_append(struct custom_events* custom_events, char* name, char* notification);
 uint64_t custom_events_get_flag_for_name(struct custom_events* custom_events, char* name);
 char* custom_events_get_name_for_notification(struct custom_events* custom_events, char* notification);
 void custom_events_destroy(struct custom_events* custom_events);

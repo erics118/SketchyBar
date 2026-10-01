@@ -2,7 +2,9 @@
 #include "misc/helpers.h"
 
 #include <AppKit/AppKit.h>
+#include <objc/message.h>
 @interface workspace_context : NSObject {
+  NSMutableSet* custom_notifications;
 }
 - (id)init;
 - (void)addCustomObserver:(NSString *)name;
@@ -117,6 +119,56 @@ CGImageRef workspace_icon_for_app(char* app) {
   }
 }
 
+CGImageRef workspace_icon_for_symbol(char* name, float value, int mode, uint32_t color, bool has_color, float scale) {
+  if (__builtin_available(macOS 13.0, *)) {
+    @autoreleasepool {
+      NSString* ns_name = [NSString stringWithUTF8String:name];
+      if (!ns_name) return NULL;
+
+      NSImage* image = [NSImage imageWithSystemSymbolName:ns_name
+                                            variableValue:value
+                                 accessibilityDescription:nil];
+      if (!image) return NULL;
+
+      NSImageSymbolConfiguration* config
+        = [NSImageSymbolConfiguration configurationWithPointSize:32
+                                                          weight:NSFontWeightRegular];
+
+      if (has_color) {
+        NSColor* ns_color = [NSColor colorWithCalibratedRed:((color >> 16) & 0xff) / 255.0
+                                                      green:((color >> 8) & 0xff) / 255.0
+                                                       blue:(color & 0xff) / 255.0
+                                                      alpha:((color >> 24) & 0xff) / 255.0];
+        config = [config configurationByApplyingConfiguration:
+          [NSImageSymbolConfiguration configurationWithHierarchicalColor:ns_color]];
+      }
+
+      // the mode api is macOS 26+ and absent from older sdks
+      SEL mode_selector = NSSelectorFromString(@"configurationWithVariableValueMode:");
+      if (mode != 0
+          && [NSImageSymbolConfiguration respondsToSelector:mode_selector]) {
+        id (*mode_config)(id, SEL, NSInteger) = (void*)objc_msgSend;
+        config = [config configurationByApplyingConfiguration:
+          mode_config([NSImageSymbolConfiguration class], mode_selector, mode)];
+      }
+
+      image = [image imageWithSymbolConfiguration:config];
+      if (!image) return NULL;
+
+      // the ctm hint fixes the pixel scale, else it follows the screen
+      NSAffineTransform* transform = [NSAffineTransform transform];
+      [transform scaleBy:scale];
+      NSRect rect = NSMakeRect(0, 0, image.size.width, image.size.height);
+      CGImageRef cg_image = [image CGImageForProposedRect: &rect
+                                                 context: NULL
+                                                   hints: @{ NSImageHintCTM: transform }];
+      if (!cg_image) return NULL;
+      return (CGImageRef)CFRetain(cg_image);
+    }
+  }
+  return NULL;
+}
+
 @implementation workspace_context
 - (id)init {
     if ((self = [super init])) {
@@ -154,6 +206,11 @@ CGImageRef workspace_icon_for_app(char* app) {
 }
 
 - (void)addCustomObserver:(NSString *)name {
+  // observers outlive config reloads, so register each notification once
+  if (!custom_notifications) custom_notifications = [[NSMutableSet alloc] init];
+  if ([custom_notifications containsObject:name]) return;
+  [custom_notifications addObject:name];
+
   [[NSDistributedNotificationCenter defaultCenter] addObserver:self
                                                   selector:@selector(allDistributedNotifications:)
                                                   name:name
@@ -164,6 +221,7 @@ CGImageRef workspace_icon_for_app(char* app) {
     [[[NSWorkspace sharedWorkspace] notificationCenter] removeObserver:self];
     [[NSNotificationCenter defaultCenter] removeObserver:self];
     [[NSDistributedNotificationCenter defaultCenter] removeObserver:self];
+    [custom_notifications release];
     [super dealloc];
 }
 

@@ -88,13 +88,15 @@ static int client_send_message(int argc, char **argv) {
   char bs_name[256];
   snprintf(bs_name, 256, MACH_BS_NAME_FMT, g_name);
 
-  char* rsp = mach_send_message(mach_get_bs_port(bs_name),
-                                message,
-                                message_length,
-                                true                     );
+  mach_port_t port = mach_get_bs_port(bs_name);
+  char* rsp = mach_send_message(port, message, message_length, true);
 
   free(message);
-  if (!rsp) return EXIT_SUCCESS;
+  if (!rsp && !port) return EXIT_SUCCESS;
+  if (!rsp) {
+    fprintf(stderr, "[!] %s: no response from the server\n", g_name);
+    return EXIT_FAILURE;
+  }
 
   if (strlen(rsp) > 2 && rsp[1] == '!') {
     fprintf(stderr, "%s", rsp);

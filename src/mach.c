@@ -33,7 +33,7 @@ void mach_receive_message(mach_port_t port, struct mach_buffer* buffer, bool tim
                           0,
                           sizeof(struct mach_buffer),
                           port,
-                          100,
+                          1000,
                           MACH_PORT_NULL                  );
   else 
     msg_return = mach_msg(&buffer->message.header,
@@ -63,6 +63,7 @@ char* mach_send_message(mach_port_t port, char* message, uint32_t len, bool awai
     if (mach_port_insert_right(task, response_port,
                                      response_port,
                                      MACH_MSG_TYPE_MAKE_SEND)!= KERN_SUCCESS) {
+      mach_port_mod_refs(task, response_port, MACH_PORT_RIGHT_RECEIVE, -1);
       return NULL;
     }
   }
@@ -93,25 +94,31 @@ char* mach_send_message(mach_port_t port, char* message, uint32_t len, bool awai
   msg.descriptor.deallocate = false;
   msg.descriptor.type = MACH_MSG_OOL_DESCRIPTOR;
 
-  mach_msg(&msg.header,
-           MACH_SEND_MSG,
-           sizeof(struct mach_message),
-           0,
-           MACH_PORT_NULL,
-           MACH_MSG_TIMEOUT_NONE,
-           MACH_PORT_NULL             );
+  // a stalled receiver must not block the caller forever
+  mach_msg_return_t send_return = mach_msg(&msg.header,
+                                           MACH_SEND_MSG | MACH_SEND_TIMEOUT,
+                                           sizeof(struct mach_message),
+                                           0,
+                                           MACH_PORT_NULL,
+                                           1000,
+                                           MACH_PORT_NULL                    );
+
+  // these failures pseudo-receive the message, which copies the ool buffer
+  if (send_return == MACH_SEND_TIMED_OUT
+      || send_return == MACH_SEND_INTERRUPTED) {
+    mach_msg_destroy(&msg.header);
+  }
 
   if (await_response) {
     struct mach_buffer buffer = { 0 };
-    mach_receive_message(response_port, &buffer, true);
+    if (send_return == MACH_MSG_SUCCESS)
+      mach_receive_message(response_port, &buffer, true);
+
     char* rsp = NULL;
     if (buffer.message.descriptor.address) {
       rsp = malloc(strlen(buffer.message.descriptor.address) + 1);
       memcpy(rsp, buffer.message.descriptor.address,
                   strlen(buffer.message.descriptor.address) + 1);
-    } else {
-      rsp = malloc(1);
-      *rsp = '\0';
     }
 
     mach_msg_destroy(&buffer.message.header);
@@ -124,6 +131,15 @@ char* mach_send_message(mach_port_t port, char* message, uint32_t len, bool awai
   return NULL;
 }
 
+// the parser reads tokens up to the first double null terminator
+static bool mach_message_is_terminated(struct mach_message* msg) {
+  char* address = msg->descriptor.address;
+  for (mach_msg_size_t i = 1; i < msg->descriptor.size; i++) {
+    if (address[i - 1] == '\0' && address[i] == '\0') return true;
+  }
+  return false;
+}
+
 void mach_message_callback(CFMachPortRef port, void* message, CFIndex size, void* context) {
   struct mach_server* mach_server = context;
   struct mach_message* msg = message;
@@ -131,15 +147,29 @@ void mach_message_callback(CFMachPortRef port, void* message, CFIndex size, void
   if (size < sizeof(struct mach_message)
       || !(msg->header.msgh_bits & MACH_MSGH_BITS_COMPLEX)
       || msg->msgh_descriptor_count != 1
-      || msg->descriptor.type != MACH_MSG_OOL_DESCRIPTOR) {
+      || msg->descriptor.type != MACH_MSG_OOL_DESCRIPTOR
+      || !msg->descriptor.address
+      || msg->descriptor.size == 0) {
     mach_msg_destroy(&msg->header);
     return;
   }
 
   struct mach_buffer buffer;
   buffer.message = *msg;
+
+  // common clients end a message with a single null, so parse a terminated copy instead of rejecting it
+  char* copy = NULL;
+  if (!mach_message_is_terminated(msg)) {
+    copy = malloc(msg->descriptor.size + 2);
+    memcpy(copy, msg->descriptor.address, msg->descriptor.size);
+    copy[msg->descriptor.size] = '\0';
+    copy[msg->descriptor.size + 1] = '\0';
+    buffer.message.descriptor.address = copy;
+  }
+
   mach_server->handler(&buffer);
-  mach_msg_destroy(&buffer.message.header);
+  if (copy) free(copy);
+  mach_msg_destroy(&msg->header);
 }
 
 #pragma clang diagnostic push
