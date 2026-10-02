@@ -124,7 +124,8 @@ void window_open(struct window* window, CGRect frame) {
   if (g_bar_manager.sticky) {
     if (!g_space) {
       g_space = SLSSpaceCreate(g_connection, 1, 0);
-      SLSSpaceSetAbsoluteLevel(g_connection, g_space, 0);
+      // above the lock screen space (300) so the bar also shows when locked
+      SLSSpaceSetAbsoluteLevel(g_connection, g_space, 400);
 
       CFArrayRef space_list = cfarray_of_cfnumbers(&g_space,
                                                    sizeof(uint32_t),

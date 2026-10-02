@@ -19,8 +19,15 @@ static int carbon_event_translation[] = {
   [kEventMouseScroll] = MOUSE_SCROLLED
 };
 
+extern struct bar_manager g_bar_manager;
+
 static pascal OSStatus mouse_handler(EventHandlerCallRef next, EventRef e, void *data) {
   enum event_type event_type = carbon_event_translation[GetEventKind(e)];
+
+  // the bar is visible on the lock screen but must not react to input there
+  // exits still pass so hover state can reset
+  if (event_type != MOUSE_EXITED && g_bar_manager.screen_locked)
+    return CallNextEventHandler(next, e);
 
   CGEventRef cg_event = CopyEventCGEvent(e);
   struct event event = { (void *) cg_event, event_type };

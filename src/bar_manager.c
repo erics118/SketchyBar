@@ -18,7 +18,18 @@ static CLOCK_CALLBACK(clock_handler) {
   event_post(&event);
 }
 
+static bool screen_is_locked(void) {
+  CFDictionaryRef session = CGSessionCopyCurrentDictionary();
+  if (!session) return false;
+  bool locked = CFDictionaryGetValue(session, CFSTR("CGSSessionScreenIsLocked"))
+                == kCFBooleanTrue;
+  CFRelease(session);
+  return locked;
+}
+
 void bar_manager_init(struct bar_manager* bar_manager) {
+  bar_manager->screen_locked = screen_is_locked();
+  bar_manager->woke_while_locked = false;
   bar_manager->font_smoothing = false;
   bar_manager->any_bar_hidden = false;
   bar_manager->needs_ordering = false;
@@ -355,7 +366,8 @@ bool bar_manager_bar_needs_redraw(struct bar_manager* bar_manager, struct bar* b
 
     if (regular_update) return true;
 
-    bool disabled_item_drawn_on_bar = !bar_item->drawing
+    bool hidden_by_lock = bar_manager->screen_locked && !bar_item->lock_screen;
+    bool disabled_item_drawn_on_bar = (!bar_item->drawing || hidden_by_lock)
                                       && (bar_item->associated_bar != 0);
 
     if (disabled_item_drawn_on_bar) return true;
@@ -1038,6 +1050,7 @@ void bar_manager_handle_system_will_sleep(struct bar_manager* bar_manager) {
 void bar_manager_handle_system_woke(struct bar_manager* bar_manager) {
   if (bar_manager->sleeps) {
     bar_manager->sleeps = false;
+    if (bar_manager->screen_locked) bar_manager->woke_while_locked = true;
 
     // Sometimes the system wake notification precedes the display layout
     // changes, so we queue a second wake event slightly later.

@@ -745,6 +745,11 @@ void handle_message_mach(struct mach_buffer* buffer) {
       handle_domain_rename(rsp, command, rbr_msg);
       free(rbr_msg);
     } else if (token_equals(command, DOMAIN_EXIT)) {
+      // the client waits for a reply, so send it before exiting
+      fflush(rsp);
+      mach_send_message(buffer->message.header.msgh_remote_port, response,
+                                                                 length + 1,
+                                                                 false      );
       bar_manager_destroy(&g_bar_manager);
       exit(0);
     } else if (token_equals(command, DOMAIN_HOTLOAD)) {

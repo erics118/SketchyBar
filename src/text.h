@@ -18,7 +18,7 @@ struct text {
   char align;
   char* string;
 
-  int y_offset;
+  float y_offset;
   int padding_left;
   int padding_right;
   uint32_t custom_width;

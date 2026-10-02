@@ -14,6 +14,7 @@ static inline int bar_top_click_pad(void) {
 
 bool bar_draws_item(struct bar* bar, struct bar_item* bar_item) {
     if (!bar_item->drawing || !bar->shown || bar->hidden) return false;
+    if (g_bar_manager.screen_locked && !bar_item->lock_screen) return false;
 
     if (((bar_item->associated_display > 0
           && (!(bar_item->associated_display & (1 << bar->adid))))

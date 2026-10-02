@@ -200,7 +200,7 @@ static bool text_set_padding_right(struct text* text, int padding) {
   return true;
 }
 
-static bool text_set_yoffset(struct text* text, int offset) {
+static bool text_set_yoffset(struct text* text, float offset) {
   if (text->y_offset == offset) return false;
   text->y_offset = offset;
   return true;
@@ -422,7 +422,7 @@ void text_serialize(struct text* text, char* indent, FILE* rsp) {
                "%s\"highlight_color\": \"0x%x\",\n"
                "%s\"padding_left\": %d,\n"
                "%s\"padding_right\": %d,\n"
-               "%s\"y_offset\": %d,\n"
+               "%s\"y_offset\": %g,\n"
                "%s\"font\": \"%s:%s:%.2f\",\n"
                "%s\"width\": %d,\n"
                "%s\"scroll_duration\": %d,\n"
@@ -518,10 +518,10 @@ bool text_parse_sub_domain(struct text* text, FILE* rsp, struct token property, 
 
   } else if (token_equals(property, PROPERTY_YOFFSET)) {
     struct token token = get_token(&message);
-    ANIMATE(text_set_yoffset,
-            text,
-            text->y_offset,
-            token_to_int(token));
+    ANIMATE_FLOAT(text_set_yoffset,
+                  text,
+                  text->y_offset,
+                  token_to_float(token));
 
   } else if (token_equals(property, PROPERTY_SCROLL_DURATION)) {
     struct token token = get_token(&message);

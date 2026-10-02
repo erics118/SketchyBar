@@ -22,6 +22,7 @@ void bar_item_init(struct bar_item* bar_item, struct bar_item* default_item) {
   bar_item->selected = false;
   bar_item->ignore_association = false;
   bar_item->overrides_association = false;
+  bar_item->lock_screen = true;
   bar_item->counter = 0;
   bar_item->type = BAR_ITEM;
   bar_item->update_frequency = 0;
@@ -773,7 +774,13 @@ void bar_item_inherit_from_item(struct bar_item* bar_item, struct bar_item* ance
   text_destroy(&bar_item->icon);
   text_destroy(&bar_item->label);
   text_destroy(&bar_item->slider.knob);
-  
+  image_destroy(&bar_item->background.image);
+  image_destroy(&bar_item->popup.background.image);
+  alias_destroy(&bar_item->alias);
+  graph_destroy(&bar_item->graph);
+  if (bar_item->parent)
+    popup_remove_item(&bar_item->parent->popup, bar_item);
+
   char* name = bar_item->name;
   char* script = bar_item->script;
   char* click_script = bar_item->click_script;
@@ -963,6 +970,7 @@ void bar_item_serialize(struct bar_item* bar_item, FILE* rsp) {
                "\t\t\"associated_space_mask\": %u,\n"
                "\t\t\"associated_display_mask\": %u,\n"
                "\t\t\"ignore_association\": \"%s\",\n"
+               "\t\t\"lock_screen\": \"%s\",\n"
                "\t\t\"y_offset\": %d,\n"
                "\t\t\"padding_left\": %d,\n"
                "\t\t\"padding_right\": %d,\n"
@@ -976,6 +984,7 @@ void bar_item_serialize(struct bar_item* bar_item, FILE* rsp) {
                bar_item->associated_space,
                bar_item->associated_display,
                format_bool(bar_item->ignore_association),
+               format_bool(bar_item->lock_screen),
                bar_item->y_offset,
                bar_item->background.padding_left,
                bar_item->background.padding_right,
@@ -1297,6 +1306,10 @@ void bar_item_parse_set_message(struct bar_item* bar_item, char* message, FILE* 
   } else if (token_equals(property, PROPERTY_IGNORE_ASSOCIATION)) {
     bar_item->ignore_association = evaluate_boolean_state(get_token(&message),
                                                           bar_item->ignore_association);
+    needs_refresh = true;
+  } else if (token_equals(property, PROPERTY_LOCK_SCREEN)) {
+    bar_item->lock_screen = evaluate_boolean_state(get_token(&message),
+                                                   bar_item->lock_screen);
     needs_refresh = true;
   } else if (token_equals(property, COMMAND_DEFAULT_RESET)) {
     bar_item_destroy(&g_bar_manager.default_item, false);

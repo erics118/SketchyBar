@@ -197,7 +197,11 @@ CGImageRef workspace_icon_for_symbol(char* name, float value, int mode, uint32_t
                 name:@"AppleInterfaceMenuBarHidingChangedNotification"
                 object:nil];
         [[NSDistributedNotificationCenter defaultCenter] addObserver:self
-                selector:@selector(didWake:)
+                selector:@selector(screenLockChanged:)
+                name:@"com.apple.screenIsLocked"
+                object:nil];
+        [[NSDistributedNotificationCenter defaultCenter] addObserver:self
+                selector:@selector(screenLockChanged:)
                 name:@"com.apple.screenIsUnlocked"
                 object:nil];
     }
@@ -267,6 +271,12 @@ CGImageRef workspace_icon_for_symbol(char* name, float value, int mode, uint32_t
       struct event event = { name, APPLICATION_FRONT_SWITCHED };
       event_post(&event);
     }
+}
+
+- (void)screenLockChanged:(NSNotification *)notification {
+    bool locked = [notification.name isEqualToString:@"com.apple.screenIsLocked"];
+    struct event event = { &locked, SCREEN_LOCK_CHANGED };
+    event_post(&event);
 }
 
 - (void)didChangeMenuBarHiding:(NSNotification *)notification {

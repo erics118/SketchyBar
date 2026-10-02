@@ -49,6 +49,24 @@ static void event_menu_bar_hidden_changed(void* context) {
   bar_manager_refresh(&g_bar_manager, false);
 }
 
+static void event_screen_lock_changed(void* context) {
+  g_bar_manager.screen_locked = *(bool*)context;
+  g_bar_manager.bar_needs_update = true;
+  bar_manager_refresh(&g_bar_manager, false);
+  if (g_bar_manager.screen_locked) return;
+
+  // displays can still be settling from a wake when the screen unlocks
+  // a plain unlock keeps the windows, since rebuilding them blanks the bar
+  if (g_bar_manager.woke_while_locked) {
+    g_bar_manager.woke_while_locked = false;
+    bar_manager_handle_system_woke(&g_bar_manager);
+  } else {
+    bar_manager_custom_events_trigger(&g_bar_manager,
+                                      COMMAND_SUBSCRIBE_SYSTEM_WOKE,
+                                      NULL                          );
+  }
+}
+
 static void event_system_woke(void* context) {
   bar_manager_handle_system_woke(&g_bar_manager);
 }
@@ -326,6 +344,8 @@ static void event_mouse_scrolled(void* context) {
                                      g_scroll_info.wid,
                                      0,
                                      g_scroll_info.modifier_keys);
+        // runs outside event_execute, so commit the refresh here
+        windows_unfreeze();
       });
     }
     return;
@@ -398,6 +418,7 @@ static callback_type* event_handler[] = {
   [COVER_CHANGED]              = event_cover_changed,
   [DISTRIBUTED_NOTIFICATION]   = event_distributed_notification,
   [MENU_BAR_HIDDEN_CHANGED]    = event_menu_bar_hidden_changed,
+  [SCREEN_LOCK_CHANGED]        = event_screen_lock_changed,
   [SYSTEM_WOKE]                = event_system_woke,
   [SYSTEM_WILL_SLEEP]          = event_system_will_sleep,
   [SHELL_REFRESH]              = event_shell_refresh,

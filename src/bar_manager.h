@@ -27,6 +27,8 @@ struct bar_manager {
   bool bar_needs_update;
   bool bar_needs_resize;
   bool show_in_fullscreen;
+  bool screen_locked;
+  bool woke_while_locked;
 
   uint32_t displays;
   char position;

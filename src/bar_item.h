@@ -32,6 +32,7 @@ struct bar_item {
   bool mouse_over;
   bool ignore_association;
   bool overrides_association;
+  bool lock_screen;
 
   // Drawing Modifiers
   bool drawing;
